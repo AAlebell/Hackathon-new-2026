@@ -34,4 +34,3 @@ test_engine.py engine checks without the interface
 ## Team
 
 Built during natHacks 2026 (November 6 to 9) at the University of Alberta.
-# Hackathon-2026
