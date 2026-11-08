@@ -6,7 +6,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - [x] Phase 0 (A) Skeleton
 - [x] Phase 1 (A) engine/ai.py
 - [x] Phase 2 (A) Loader and tutorial level
-- [ ] Phase 3 (A) Level engine
+- [x] Phase 3 (A) Level engine
 - [ ] Phase 4 (A) Grading
 - [ ] Phase 5 (A) Save and load
 - [ ] Phase 6 (B) Interface part 1
@@ -27,5 +27,9 @@ Contract: docs/MASTER_PROMPT.md section 4.
 
 - scenarios/cafe.json is a copy of docs/cafe.json (old prototype format removed). The loader also accepts attack type "combined", used by the content file.
 - The old app.py, engine/easy.py and engine/rounds.py no longer work with the new cafe.json. Expected, Phase 6 (James) rewrites app.py; Phases 3 and 10 replace the old engine files.
+
+- security and helpfulness totals count only the zones attacked or asked about in the played package (same as docs/check_cafe_design.py). Zones nobody touched stay safe on the map but add no points.
+- Event steps start at 1, like docs/sample_results.json.
+- engine/easy.py deleted in Phase 3, superseded by engine/level.py.
 
 ## Notes for James
