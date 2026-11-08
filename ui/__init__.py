@@ -1,1 +1,1 @@
-"""Streamlit interface package."""
+"""Streamlit interface: adapter, map drawing and screens."""
