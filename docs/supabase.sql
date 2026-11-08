@@ -1,7 +1,4 @@
--- Run once in the Supabase SQL Editor. Design and reasoning: docs/PLAN.md section 7.1.
--- One row per finished run. No select policy is created on purpose: the public key
--- can only insert, so engine/storage.py must insert with the minimal return option.
-
+-- Run once in the Supabase SQL Editor. See section 7.1 of docs/PLAN.md.
 create table plays (
   id bigint generated always as identity primary key,
   created_at timestamptz not null default now(),
@@ -35,9 +32,10 @@ create table plays (
 );
 
 alter table plays enable row level security;
-
 create policy "anon can insert plays" on plays
   for insert to anon with check (true);
 
--- Needed because "Automatically expose new tables" is switched off for the project.
+-- Needed because 'Automatically expose new tables' is switched off in the project settings.
 grant insert on table public.plays to anon;
+
+-- No select policy on purpose: the public key can insert but never read.

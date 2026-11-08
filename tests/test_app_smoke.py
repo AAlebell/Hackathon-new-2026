@@ -56,10 +56,24 @@ def structure(result: dict) -> dict:
 
 
 def test_run_level_matches_sample_runs() -> None:
-    """run_level (stand-in or real engine) reproduces the outcomes, maps and scores of every canned run."""
+    """run_level (stand-in or real engine) reproduces outcomes, maps and scores of every reference run."""
     for name, run in data.sample_runs().items():
-        got = data.run_level(LEVEL, run["chosen_rules"], run["package_index"])
+        got = data.run_level(LEVEL, run["chosen_rules"], run["result"]["package_index"])
         assert structure(got) == structure(run["result"]), name
+        if not data.using_real_engine():
+            assert got == run["result"], name  # the stand-in also reproduces the wording
+
+
+def test_sample_zones_match_level() -> None:
+    """The level keeps the zone ids, rings and points listed in docs/sample_results.json."""
+    keys = ("id", "ring", "points")
+    shorten = lambda zones: [{k: zone[k] for k in keys} for zone in zones]  # noqa: E731
+    assert shorten(LEVEL["map_zones"]) == shorten(data.sample_map_zones())
+
+
+def test_tutorial_has_guide_steps() -> None:
+    """The first level carries the 10 tutorial guide steps."""
+    assert len(LEVEL["guide_steps"]) == 10
 
 
 def test_unknown_rule_raises() -> None:

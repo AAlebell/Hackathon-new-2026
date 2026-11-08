@@ -1,8 +1,10 @@
 """Adapter between the interface and the engine, the only file in ui/ that touches engine/.
 
-Once engine/level.py exists this file calls the real engine. Until then it falls back to
-docs/sample_results.json and a small stand-in for run_level, so the interface can be built
-and played on its own. The switch is automatic, nothing in app.py or ui/screens.py changes.
+Once engine/level.py exists this file calls the real engine. Until then it falls back to a
+stand-in scenario (ui/sample_scenario.json) and a small stand-in for run_level, so the
+interface can be built and played on its own. docs/sample_results.json holds the reference
+outputs the stand-in is tested against. The switch is automatic, nothing in app.py or
+ui/screens.py changes.
 """
 
 import copy
@@ -12,7 +14,11 @@ import random
 from functools import lru_cache
 from pathlib import Path
 
-SAMPLE_PATH = Path(__file__).resolve().parent.parent / "docs" / "sample_results.json"
+ROOT = Path(__file__).resolve().parent.parent
+SAMPLE_PATH = ROOT / "docs" / "sample_results.json"
+FIXTURE_PATH = ROOT / "ui" / "sample_scenario.json"
+GUIDE_PATH = ROOT / "docs" / "guide_steps.json"
+GUIDE_LEVEL_ID = "tutorial_1"
 SECRET_RINGS = ("inner", "sensitive", "core")
 
 
@@ -31,8 +37,24 @@ def _sample() -> dict:
 
 
 def sample_runs() -> dict:
-    """Return the canned runs, used by tests to check the engine against the contract."""
-    return copy.deepcopy(_sample()["runs"])
+    """Return the reference runs (chosen_rules, result, grade) from docs/sample_results.json."""
+    return copy.deepcopy(_sample()["samples"])
+
+
+def sample_map_zones() -> list[dict]:
+    """Return the map zones listed in docs/sample_results.json."""
+    return copy.deepcopy(_sample()["map_zones"])
+
+
+@lru_cache(maxsize=1)
+def _fixture() -> dict:
+    """Read the stand-in scenario once and attach the tutorial guide steps to its tutorial level."""
+    scenario = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    steps = json.loads(GUIDE_PATH.read_text(encoding="utf-8"))
+    for level in scenario["levels"]:
+        if level["id"] == GUIDE_LEVEL_ID:
+            level["guide_steps"] = steps
+    return scenario
 
 
 def load_scenario(scenario_id: str = "cafe") -> dict:
@@ -41,7 +63,7 @@ def load_scenario(scenario_id: str = "cafe") -> dict:
         from engine.scenarios import load_scenario as real_load
 
         return real_load(scenario_id)
-    scenario = copy.deepcopy(_sample()["scenario"])
+    scenario = copy.deepcopy(_fixture())
     if scenario["id"] != scenario_id:
         raise ValueError(f"Unknown scenario: {scenario_id}")
     return scenario
@@ -111,7 +133,7 @@ def _standin_run_level(level: dict, chosen_rules: list[str], package_index: int)
     state = {zone["id"]: "safe" for zone in zones}
     order = _interleave(level["attack_packages"][package_index], level["customer_questions"])
     events = [_play_step(i, sender, item, chosen_rules, state)
-              for i, (sender, item) in enumerate(order)]
+              for i, (sender, item) in enumerate(order, start=1)]
     core_ids = [zone["id"] for zone in zones if zone["ring"] == "core"]
     return {"events": events,
             "security": _points(zones, state, SECRET_RINGS),
