@@ -15,7 +15,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - [x] Phase 9 (A) More levels and balance test
 - [x] Phase 10 (A) Endless engine
 - [ ] Phase 11 (B) Endless interface
-- [ ] Phase 12 Storage (part A / part B)
+- [ ] Phase 12 Storage (part A done, part B open)
 - [ ] Phase 13 Final checks (part A / part B)
 
 ## Decisions
@@ -40,5 +40,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 
 - Endless: a secret found in ANY reply (attacker or customer) marks its zone lost on that event. An attack outcome is "leaked" if its reply leaked any secret. Secrets shorter than 6 letters or digits (the "$2.10" supplier price) only match as a whole token, so "2100" is not a leak.
 - engine/rounds.py deleted and engine/judge.py rewritten in Phase 10 (superseded by engine/endless.py and the new judge). is_served is gone, use is_helpful.
+
+- Storage: build_row stores rules_used only for tutorial/level, rules_chars only for endless, guide_skipped only for tutorial, ai_model and ai_temperature only for endless. ENGINE_VERSION is "1.0.0". record_play is offline tested only (no Supabase keys yet).
 
 ## Notes for James
