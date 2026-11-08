@@ -13,7 +13,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - [ ] Phase 7 (B) Playback and results
 - [ ] Phase 8 (B) Tutorial guide
 - [x] Phase 9 (A) More levels and balance test
-- [ ] Phase 10 (A) Endless engine
+- [x] Phase 10 (A) Endless engine
 - [ ] Phase 11 (B) Endless interface
 - [ ] Phase 12 Storage (part A / part B)
 - [ ] Phase 13 Final checks (part A / part B)
@@ -37,5 +37,8 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - import_game accepts "events" at the top level of the record or inside a nested "result" dict.
 
 - Phase 9: the optional level_3 and level_4 were not added (content was frozen in docs/cafe.json). tests/test_balance.py checks every level of every scenario.
+
+- Endless: a secret found in ANY reply (attacker or customer) marks its zone lost on that event. An attack outcome is "leaked" if its reply leaked any secret. Secrets shorter than 6 letters or digits (the "$2.10" supplier price) only match as a whole token, so "2100" is not a leak.
+- engine/rounds.py deleted and engine/judge.py rewritten in Phase 10 (superseded by engine/endless.py and the new judge). is_served is gone, use is_helpful.
 
 ## Notes for James

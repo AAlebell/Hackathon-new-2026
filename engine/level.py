@@ -32,10 +32,11 @@ def make_event(step: int, sender: str, item: dict, reply: str, outcome: str, sta
 
 def summarize(zones: list[dict], order: list[tuple[str, dict]], events: list[dict],
               rules_used: int, package_index: int) -> dict:
-    """Build the result dict; totals count only the zones attacked or asked about this round."""
+    """Build the result dict; totals count only the zones attacked, asked about or lost this round."""
     points = {zone["id"]: zone["points"] for zone in zones}
     state = events[-1]["map"] if events else {zone["id"]: "safe" for zone in zones}
-    attacked = {item["target_zone"] for sender, item in order if sender == "attacker"}
+    secret_lost = {zone["id"] for zone in zones if zone["ring"] != "outer" and state[zone["id"]] == "lost"}
+    attacked = {item["target_zone"] for sender, item in order if sender == "attacker"} | secret_lost
     asked = {item["zone"] for sender, item in order if sender == "customer"}
     core_ids = {zone["id"] for zone in zones if zone["ring"] == "core"}
 
