@@ -7,7 +7,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - [x] Phase 1 (A) engine/ai.py
 - [x] Phase 2 (A) Loader and tutorial level
 - [x] Phase 3 (A) Level engine
-- [ ] Phase 4 (A) Grading
+- [x] Phase 4 (A) Grading
 - [ ] Phase 5 (A) Save and load
 - [ ] Phase 6 (B) Interface part 1
 - [ ] Phase 7 (B) Playback and results
@@ -31,5 +31,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - security and helpfulness totals count only the zones attacked or asked about in the played package (same as docs/check_cafe_design.py). Zones nobody touched stay safe on the map but add no points.
 - Event steps start at 1, like docs/sample_results.json.
 - engine/easy.py deleted in Phase 3, superseded by engine/level.py.
+
+- Grading: "perfect" also needs no length penalty (written rules up to 400 characters). Scores and percentages are rounded to whole numbers.
 
 ## Notes for James
