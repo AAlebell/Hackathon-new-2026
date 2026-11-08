@@ -16,7 +16,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - [x] Phase 10 (A) Endless engine
 - [ ] Phase 11 (B) Endless interface
 - [ ] Phase 12 Storage (part A done, part B open)
-- [ ] Phase 13 Final checks (part A / part B)
+- [ ] Phase 13 Final checks (part A done, part B open)
 
 ## Decisions
 - Person A works on one branch, dong/auto-run, with one pull request for phases 0 to 13A (user request).
@@ -44,3 +44,8 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - Storage: build_row stores rules_used only for tutorial/level, rules_chars only for endless, guide_skipped only for tutorial, ai_model and ai_temperature only for endless. ENGINE_VERSION is "1.0.0". record_play is offline tested only (no Supabase keys yet).
 
 ## Notes for James
+- Contract check of your branch claude/practical-mayer-3uwyov (not merged into main yet): ui/data.py calls load_scenario, pick_package and run_level with the section 4 names and shapes. No mismatch found. With this branch your tests/test_app_smoke.py passes against the real engine (checked in a scratch worktree, your files untouched).
+- Small difference only in your stand-in (_standin_run_level): it counts every zone of a ring in the totals, the real engine counts only zones attacked or asked about. The stand-in is no longer used once engine/level.py exists.
+- main's app.py still imports engine.easy and engine.rounds, which this branch deletes, so app.py on main will not start until your Phase 6 app.py is merged. Expected (master prompt Phase 0 notice).
+- Both branches create docs/PROGRESS.md, so the second one merged will get a merge conflict there. Keep both sets of ticks and notes.
+- Phase 13 part A: tests pass, no .env, data/ or key like strings (AIza, sb_, eyJ) tracked, requirements.txt installs on Python 3.14.
