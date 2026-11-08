@@ -92,3 +92,8 @@ Cách giữ không lệch nhau:
 - Trước mỗi phase mới, chạy git checkout main và git pull để lấy bản mới nhất.
 - Repo hiện đã có bản prototype cũ (engine, scenarios, app.py). Kế hoạch mới thay thế nó dần theo từng phase. Phase 0 sẽ sửa CLAUDE.md, thay phần hợp đồng cũ (run_round, resolve_choice) bằng hợp đồng mới ở mục 4 của MASTER_PROMPT.md. Hai bạn cần đồng ý việc này trước khi bắt đầu.
 - Bản prototype cũ có chế độ Easy (chọn thẻ trắc nghiệm). Chế độ đó đã bị bỏ trong kế hoạch mới (Level mode chọn luật, Endless tự viết luật).
+
+## 9. Nội dung level đã viết sẵn (không để Claude Code tự bịa)
+- docs/cafe.json chứa sẵn nội dung game: 4 level (tutorial_1, tutorial_2, level_1, level_2) và 2 section Endless, đúng định dạng của hợp đồng mục 4. Đã kiểm tra cân bằng bằng docs/check_cafe_design.py (kết quả ERRORS: 0).
+- Phase 2 chỉ chép file này sang scenarios/cafe.json và viết bộ nạp (loader). Phase 9 chỉ viết test cân bằng, không viết lại level. Phase 10 dùng sẵn 2 section.
+- Muốn sửa lời thoại hay thêm level thì sửa trực tiếp docs/cafe.json (và scenarios/cafe.json), rồi chạy: python docs/check_cafe_design.py docs/cafe.json

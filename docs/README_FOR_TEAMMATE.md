@@ -29,3 +29,5 @@ Game: the player defends a fictional café chatbot (Beanie) from prompt injectio
 
 ## About the earlier browser demo
 The teammate's demo is a design reference only. Do not commit its HTML or server files. Section 7 of MASTER_PROMPT.md lists the ideas we adopted from it.
+
+Game content is pre-written in docs/cafe.json (4 levels, 2 Endless sections). Check it with: python docs/check_cafe_design.py docs/cafe.json
