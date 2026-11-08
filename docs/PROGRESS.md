@@ -12,7 +12,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - [ ] Phase 6 (B) Interface part 1
 - [ ] Phase 7 (B) Playback and results
 - [ ] Phase 8 (B) Tutorial guide
-- [ ] Phase 9 (A) More levels and balance test
+- [x] Phase 9 (A) More levels and balance test
 - [ ] Phase 10 (A) Endless engine
 - [ ] Phase 11 (B) Endless interface
 - [ ] Phase 12 Storage (part A / part B)
@@ -35,5 +35,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - Grading: "perfect" also needs no length penalty (written rules up to 400 characters). Scores and percentages are rounded to whole numbers.
 
 - import_game accepts "events" at the top level of the record or inside a nested "result" dict.
+
+- Phase 9: the optional level_3 and level_4 were not added (content was frozen in docs/cafe.json). tests/test_balance.py checks every level of every scenario.
 
 ## Notes for James
