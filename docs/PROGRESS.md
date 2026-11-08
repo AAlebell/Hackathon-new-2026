@@ -8,7 +8,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - [x] Phase 2 (A) Loader and tutorial level
 - [x] Phase 3 (A) Level engine
 - [x] Phase 4 (A) Grading
-- [ ] Phase 5 (A) Save and load
+- [x] Phase 5 (A) Save and load
 - [ ] Phase 6 (B) Interface part 1
 - [ ] Phase 7 (B) Playback and results
 - [ ] Phase 8 (B) Tutorial guide
@@ -33,5 +33,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - engine/easy.py deleted in Phase 3, superseded by engine/level.py.
 
 - Grading: "perfect" also needs no length penalty (written rules up to 400 characters). Scores and percentages are rounded to whole numbers.
+
+- import_game accepts "events" at the top level of the record or inside a nested "result" dict.
 
 ## Notes for James
