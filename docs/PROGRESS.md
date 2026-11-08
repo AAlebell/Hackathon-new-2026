@@ -5,7 +5,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 ## Phases
 - [x] Phase 0 (A) Skeleton
 - [x] Phase 1 (A) engine/ai.py
-- [ ] Phase 2 (A) Loader and tutorial level
+- [x] Phase 2 (A) Loader and tutorial level
 - [ ] Phase 3 (A) Level engine
 - [ ] Phase 4 (A) Grading
 - [ ] Phase 5 (A) Save and load
@@ -24,5 +24,8 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - test_engine.py now just runs tests/run_all.py.
 
 - call_ai reads USE_FAKE_AI at call time (not import time), so tests can switch it per process.
+
+- scenarios/cafe.json is a copy of docs/cafe.json (old prototype format removed). The loader also accepts attack type "combined", used by the content file.
+- The old app.py, engine/easy.py and engine/rounds.py no longer work with the new cafe.json. Expected, Phase 6 (James) rewrites app.py; Phases 3 and 10 replace the old engine files.
 
 ## Notes for James
