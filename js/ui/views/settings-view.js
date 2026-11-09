@@ -27,7 +27,7 @@ export function viewSettings() {
     devHtml = `<form class="stack" data-form="devsave" autocomplete="off">
       <p class="okmsg">Unlocked in this tab. Reloading the page locks it again.</p>
       <div class="budget"><span>API key on the server</span><span class="mono">${AI.keyHint ? esc(AI.keyHint) : "none set"}</span></div>
-      <label class="f" for="dev-key">New API key<input type="password" id="dev-key" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"></label>
+      <label class="f" for="dev-key">New API key<input type="password" id="dev-key" placeholder="AIza… / sk-ant-… / sk-…" autocomplete="off" spellcheck="false"></label>
       <label class="f" for="dev-model">Model<select id="dev-model">${AI.models.map(m => `<option ${m === AI.model ? "selected" : ""}>${esc(m)}</option>`).join("")}</select></label>
       <p class="muted" style="font-size:13px">The key goes once to the local server, which saves it in .env and never sends it back. Only a masked hint is shown here.</p>
       <div class="row"><button class="btn primary" type="submit" ${state.dev.busy ? "disabled" : ""}>Save</button>

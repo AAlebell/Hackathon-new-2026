@@ -1,10 +1,10 @@
 # =====================================================================
 # server.py
-# Local game server for Chatbot Defense Arena on 127.0.0.1:8000.
+# Local & cloud game server for Chatbot Defense Arena.
 # Serves the modular ES-Module SPA (index.html, css/, data/, js/),
-# stores the Anthropic API key and developer passcode in a local .env
-# file (owner-only 0600 permissions, never exposed over HTTP), maintains
-# a local record board in records.json, and proxies all live AI calls
+# stores the API key (Gemini, Claude, or OpenAI) and developer passcode
+# in .env (owner-only 0600 permissions, never exposed over HTTP),
+# maintains a record board in records.json, and proxies all live AI calls
 # (/api/ai/chatbot and /api/ai/attacks) so the browser never receives
 # the raw API key.
 # =====================================================================
@@ -17,7 +17,9 @@ import re
 import secrets
 import stat
 import time
+import urllib.error
 import urllib.parse
+import urllib.request
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -27,17 +29,23 @@ RECORDS_PATH = ROOT_DIR / "records.json"
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8000"))
 
-# Models offered in the Settings -> Developer dropdown (matching handoff spec).
+# Models offered in the Settings -> Developer dropdown (Gemini, Claude, OpenAI).
 MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro",
+    "gemini-2.0-flash",
     "claude-sonnet-4-5",
     "claude-haiku-4-5",
     "claude-opus-4-5",
     "claude-3-7-sonnet-latest",
     "claude-3-5-haiku-latest",
+    "gpt-4o-mini",
+    "gpt-4o",
 ]
-DEFAULT_MODEL = MODELS[0]
+DEFAULT_MODEL = "gemini-2.5-flash"
 
-# Security & session constants (matching handoff spec: 5 wrong tries -> 10m lock, 2h token).
+# Security & session constants (5 wrong tries -> 10m lock, 2h token).
 MAX_FAILED_TRIES = 5
 LOCKOUT_SECONDS = 10 * 60
 TOKEN_TTL_SECONDS = 2 * 60 * 60
@@ -89,16 +97,19 @@ def load_env() -> dict:
                 continue
             k, v = line.split("=", 1)
             cfg[k.strip()] = v.strip().strip('"').strip("'")
-    for key in ("DEV_PASSCODE", "ANTHROPIC_API_KEY", "AI_MODEL"):
+    for key in ("DEV_PASSCODE", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY", "AI_MODEL"):
         if not cfg.get(key) and os.environ.get(key):
             cfg[key] = os.environ[key].strip()
+    # Unify into ANTHROPIC_API_KEY slot as the active API key if GEMINI_API_KEY or OPENAI_API_KEY was set in env.
+    if not cfg.get("ANTHROPIC_API_KEY"):
+        cfg["ANTHROPIC_API_KEY"] = cfg.get("GEMINI_API_KEY") or cfg.get("OPENAI_API_KEY") or ""
     return cfg
 
 
 def save_env(cfg: dict) -> None:
     """Write key-value pairs to .env and restrict file permissions to owner-only (0600)."""
     lines = [
-        "# Chatbot Defense Arena local server configuration (never commit this file)",
+        "# Chatbot Defense Arena server configuration (never commit this file)",
         f"DEV_PASSCODE={cfg.get('DEV_PASSCODE', '')}",
         f"ANTHROPIC_API_KEY={cfg.get('ANTHROPIC_API_KEY', '')}",
         f"AI_MODEL={cfg.get('AI_MODEL', DEFAULT_MODEL)}",
@@ -126,7 +137,7 @@ def ensure_env() -> dict:
         print("=" * 64)
         print("Created .env with a new developer passcode:")
         print(f"  DEV_PASSCODE = {cfg['DEV_PASSCODE']}")
-        print("Open http://localhost:8000 -> Settings -> Developer to unlock.")
+        print(f"Open http://localhost:{PORT} -> Settings -> Developer to unlock.")
         print("=" * 64)
     return cfg
 
@@ -182,7 +193,6 @@ def verify_token(token: str) -> bool:
     if not token:
         return False
     now = time.time()
-    # Purge expired tokens.
     expired = [t for t, exp in _auth_state["tokens"].items() if exp < now]
     for t in expired:
         del _auth_state["tokens"][t]
@@ -193,16 +203,59 @@ def verify_token(token: str) -> bool:
 
 
 # ---------------------------------------------------------------------
-# Live AI calls (Anthropic SDK)
+# Live AI calls (Google Gemini, Anthropic Claude, and OpenAI GPT)
 # ---------------------------------------------------------------------
 
-def call_ai(system_prompt: str, user_message: str, max_tokens: int = 350, temperature: float = 0.3) -> str:
-    """Call Anthropic Claude with the configured API key and model."""
-    cfg = load_env()
-    api_key = cfg.get("ANTHROPIC_API_KEY", "").strip()
-    model = cfg.get("AI_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
-    if not api_key:
-        raise RuntimeError("No API key is set on the server.")
+def _call_gemini(api_key: str, model: str, system_prompt: str, user_message: str, max_tokens: int, temperature: float) -> str:
+    """Call Google Gemini via the google-genai SDK or REST fallback."""
+    try:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=model,
+            contents=user_message,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                max_output_tokens=max_tokens,
+                temperature=temperature,
+            ),
+        )
+        text = (getattr(response, "text", None) or "").strip()
+        if text:
+            return text
+    except ImportError:
+        # Direct REST fallback if google-genai is not installed.
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{urllib.parse.quote(model)}:generateContent?key={urllib.parse.quote(api_key)}"
+        payload = {
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "contents": [{"role": "user", "parts": [{"text": user_message}]}],
+            "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="ignore")
+            raise RuntimeError(f"Gemini API error ({e.code}): {err_body[:200]}") from e
+        cands = data.get("candidates") or []
+        if cands:
+            parts = (cands[0].get("content") or {}).get("parts") or []
+            text = "".join(p.get("text", "") for p in parts).strip()
+            if text:
+                return text
+    return "Sorry, I can't help with that request right now."
+
+
+def _call_anthropic(api_key: str, model: str, system_prompt: str, user_message: str, max_tokens: int, temperature: float) -> str:
+    """Call Anthropic Claude via the anthropic SDK."""
     try:
         import anthropic
     except ImportError as exc:
@@ -218,14 +271,62 @@ def call_ai(system_prompt: str, user_message: str, max_tokens: int = 350, temper
     )
     parts = [block.text for block in getattr(msg, "content", []) if getattr(block, "type", "") == "text"]
     text = "\n".join(parts).strip()
-    if not text:
-        return "Sorry, I can't help with that request right now."
-    return text
+    return text or "Sorry, I can't help with that request right now."
+
+
+def _call_openai(api_key: str, model: str, system_prompt: str, user_message: str, max_tokens: int, temperature: float) -> str:
+    """Call OpenAI Chat Completions via HTTPS REST."""
+    url = "https://api.openai.com/v1/chat/completions"
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"OpenAI API error ({e.code}): {err_body[:200]}") from e
+    choices = data.get("choices") or []
+    if choices:
+        text = ((choices[0].get("message") or {}).get("content") or "").strip()
+        if text:
+            return text
+    return "Sorry, I can't help with that request right now."
+
+
+def call_ai(system_prompt: str, user_message: str, max_tokens: int = 350, temperature: float = 0.3) -> str:
+    """Dispatch the AI call to Gemini, Claude, or OpenAI according to the selected model."""
+    cfg = load_env()
+    api_key = cfg.get("ANTHROPIC_API_KEY", "").strip()
+    model = cfg.get("AI_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    if not api_key:
+        raise RuntimeError("No API key is set on the server.")
+
+    if model.startswith("gemini-"):
+        return _call_gemini(api_key, model, system_prompt, user_message, max_tokens, temperature)
+    if model.startswith("gpt-"):
+        return _call_openai(api_key, model, system_prompt, user_message, max_tokens, temperature)
+    return _call_anthropic(api_key, model, system_prompt, user_message, max_tokens, temperature)
 
 
 def generate_attacks(business: str, assets: list, types: list, count: int, section: int) -> dict:
-    """Ask Claude to write structured red-team attack messages for an Endless section."""
-    Chosen_guides = "\n".join(f"- {t}: {TYPE_GUIDE.get(t, t)}" for t in types)
+    """Ask the configured AI model to write structured red-team attack messages for an Endless section."""
+    chosen_guides = "\n".join(f"- {t}: {TYPE_GUIDE.get(t, t)}" for t in types)
     asset_lines = "\n".join(
         f"- id: \"{a.get('id')}\", name: \"{a.get('name')}\", kind: \"{a.get('kind')}\", target: \"{a.get('about')}\""
         for a in assets
@@ -235,11 +336,10 @@ def generate_attacks(business: str, assets: list, types: list, count: int, secti
         f"Section number: {section}\n"
         f"Number of attack messages to generate: {count}\n\n"
         f"Protected assets you may target (pick 1 to 3 of these to focus on):\n{asset_lines}\n\n"
-        f"Allowed attack techniques (every attack 'type' MUST be one of {json.dumps(types)}):\n{Chosen_guides}\n\n"
+        f"Allowed attack techniques (every attack 'type' MUST be one of {json.dumps(types)}):\n{chosen_guides}\n\n"
         f"Write exactly {count} varied, natural-sounding attack messages in JSON format."
     )
     raw = call_ai(ATTACK_SYSTEM, user_prompt, max_tokens=900, temperature=0.7)
-    # Strip optional markdown code fences if the model included them.
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.IGNORECASE)
     start = cleaned.find("{")
     end = cleaned.rfind("}")
@@ -323,13 +423,11 @@ class ArenaRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(200, {"records": load_records()[:20]})
             return
 
-        # Block sensitive files explicitly with 404 (matching verification spec).
         rel_name = path.lstrip("/")
         if rel_name in FORBIDDEN_NAMES or any(part.startswith(".") for part in Path(rel_name).parts):
             self.send_error(404, "Not Found")
             return
 
-        # Serve SPA root or whitelisted static asset directories.
         if path in ALLOWED_STATIC_FILES:
             target = ROOT_DIR / "index.html"
         elif path.startswith(ALLOWED_STATIC_PREFIXES):
@@ -435,8 +533,8 @@ class ArenaRequestHandler(http.server.BaseHTTPRequestHandler):
             new_model = str(body.get("model", "")).strip()
 
             if new_key:
-                if not new_key.startswith("sk-") or len(new_key) < 20:
-                    self._send_json(400, {"error": "API key format looks invalid (expected 'sk-ant-…')."})
+                if len(new_key) < 16 or " " in new_key:
+                    self._send_json(400, {"error": "API key format looks invalid (expected Gemini 'AIza…', Claude 'sk-ant-…', or OpenAI 'sk-…')."})
                     return
                 cfg["ANTHROPIC_API_KEY"] = new_key
 
@@ -520,7 +618,7 @@ class ArenaRequestHandler(http.server.BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    """Initialise .env and run the local HTTP server on 127.0.0.1:8000."""
+    """Initialise .env and run the HTTP server."""
     cfg = ensure_env()
     server = http.server.ThreadingHTTPServer((HOST, PORT), ArenaRequestHandler)
     print(f"Chatbot Defense Arena server running at http://localhost:{PORT}")
