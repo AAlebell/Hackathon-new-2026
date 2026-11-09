@@ -9,7 +9,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - [x] Phase 3 (A) Level engine
 - [x] Phase 4 (A) Grading
 - [x] Phase 5 (A) Save and load
-- [ ] Phase 6 (B) Interface part 1
+- [x] Phase 6 (B) Interface part 1
 - [ ] Phase 7 (B) Playback and results
 - [ ] Phase 8 (B) Tutorial guide
 - [x] Phase 9 (A) More levels and balance test
@@ -49,3 +49,15 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - main's app.py still imports engine.easy and engine.rounds, which this branch deletes, so app.py on main will not start until your Phase 6 app.py is merged. Expected (master prompt Phase 0 notice).
 - Both branches create docs/PROGRESS.md, so the second one merged will get a merge conflict there. Keep both sets of ticks and notes.
 - Phase 13 part A: tests pass, no .env, data/ or key like strings (AIza, sb_, eyJ) tracked, requirements.txt installs on Python 3.14.
+
+## Frontend notes (B, James)
+Phase 6 is done: home, level select, level screen with the SVG map and rule cards, a Start button that runs the level, and a placeholder playback screen. Phases 7, 8 and 11 are not started, 12B and 13B are open.
+
+### Decisions
+- Map rendering: `st.html` strips SVG in Streamlit 1.67 (the map came out empty), so ui/screens.py shows it with `st.markdown(..., unsafe_allow_html=True)` inside a `<div>` so markdown never touches the labels. Every label is escaped in ui/map.py.
+- ui/data.py is the only file in ui/ that touches engine/. With engine/level.py present it calls engine.scenarios.load_scenario and engine.level.pick_package and run_level. The stand-in (ui/sample_scenario.json and `_standin_run_level`) is only a fallback and is not used while the real engine exists. The stand-in counts every zone of a ring in the totals, the real engine counts only the zones in the played package, which does not matter while the real engine is used.
+- The level screen shows `level["story"]` when present, otherwise the scenario description. Rule cards show the label (toggle) and the rule text only, never side effects. Order is JSON order until Phase 16.
+- The playback screen is a placeholder until Phase 7.
+
+### Notes
+- tests/test_app_smoke.py (B) checks the map SVG, the adapter against docs/sample_results.json and the screen flow, and is picked up by tests/run_all.py.
