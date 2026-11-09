@@ -24,8 +24,8 @@ ROOT_DIR = Path(__file__).resolve().parent
 ENV_PATH = ROOT_DIR / ".env"
 RECORDS_PATH = ROOT_DIR / "records.json"
 
-HOST = "127.0.0.1"
-PORT = 8000
+HOST = os.environ.get("HOST", "0.0.0.0")
+PORT = int(os.environ.get("PORT", "8000"))
 
 # Models offered in the Settings -> Developer dropdown (matching handoff spec).
 MODELS = [
@@ -80,7 +80,7 @@ _auth_state = {
 # ---------------------------------------------------------------------
 
 def load_env() -> dict:
-    """Read key-value pairs from the local .env file."""
+    """Read key-value pairs from the local .env file, falling back to OS environment variables."""
     cfg = {}
     if ENV_PATH.exists():
         for raw in ENV_PATH.read_text(encoding="utf-8").splitlines():
@@ -89,6 +89,9 @@ def load_env() -> dict:
                 continue
             k, v = line.split("=", 1)
             cfg[k.strip()] = v.strip().strip('"').strip("'")
+    for key in ("DEV_PASSCODE", "ANTHROPIC_API_KEY", "AI_MODEL"):
+        if not cfg.get(key) and os.environ.get(key):
+            cfg[key] = os.environ[key].strip()
     return cfg
 
 
@@ -274,9 +277,15 @@ class ArenaRequestHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _check_same_origin(self) -> bool:
-        """Reject POST requests whose Origin header is not this local server."""
+        """Reject POST requests whose Origin header does not match this server."""
         origin = self.headers.get("Origin", "")
-        allowed = {f"http://localhost:{PORT}", f"http://127.0.0.1:{PORT}"}
+        host = self.headers.get("Host", "")
+        allowed = {
+            f"http://localhost:{PORT}",
+            f"http://127.0.0.1:{PORT}",
+            f"http://{host}",
+            f"https://{host}",
+        }
         if origin not in allowed:
             self._send_json(403, {"error": "Forbidden origin"})
             return False

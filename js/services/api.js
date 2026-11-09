@@ -14,9 +14,9 @@ export async function api(path, body) {
   if (!r.ok) { const e = new Error(j.error || `Request failed (${r.status})`); e.status = r.status; throw e; }
   return j;
 }
-// When served from localhost, ask /api/status whether the game server and live AI are available and update AI.
+// Ask /api/status whether the game server and live AI are available and update AI.
 export async function detectServer() {
-  if (["localhost", "127.0.0.1"].includes(location.hostname) && location.protocol.startsWith("http")) {
+  if (location.protocol.startsWith("http")) {
     try {
       const r = await fetch("/api/status", { cache: "no-store" });
       if (r.ok) { const j = await r.json(); if (j.server) Object.assign(AI, { server: true, ready: j.ai_ready, model: j.model, models: j.models }); }
