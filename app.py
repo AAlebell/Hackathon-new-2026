@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from ui import common, data, endless, playback, screens
+from ui import common, data, endless, playback, screens, shell, theme
 
 st.set_page_config(page_title="Chatbot Defense Arena", page_icon="\U0001f6e1️", layout="wide")
 
@@ -30,6 +30,8 @@ def init_state() -> None:
 
 
 init_state()
+theme.apply_theme()
+shell.topbar()
 if st.session_state.get("shown_screen") != st.session_state["screen"]:
     st.session_state["shown_screen"] = st.session_state["screen"]
     common.scroll_to_top()

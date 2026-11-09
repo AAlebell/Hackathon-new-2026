@@ -25,8 +25,8 @@ real customer still served (**helpfulness**), so "refuse everything" never wins.
 
 | | |
 |---|---|
-| ![Home screen](docs/screenshots/01-home.png) | ![The tutorial guide highlights the map and dims the rest](docs/screenshots/02-tutorial-guide.png) |
-| ![Playback: chat on the left, the map updates on the right](docs/screenshots/03-playback.png) | ![Results with an explanation and a coach tip for every leak](docs/screenshots/04-results.png) |
+| ![Home screen with the example system core map](docs/screenshots/01-home.png) | ![The tutorial guide highlights the map and dims the rest](docs/screenshots/02-tutorial-guide.png) |
+| ![Playback: your rules, the live system core map and the chat side by side](docs/screenshots/03-playback.png) | ![Results with an explanation and a coach tip for every leak](docs/screenshots/04-results.png) |
 | ![Endless mode: write your own rules](docs/screenshots/05-endless.png) | |
 
 ## Run it
@@ -89,7 +89,9 @@ best defence is to never give a chatbot a secret it does not need.
 ```
 app.py          Streamlit entry point, routes between the screens
 ui/             interface: screens, playback and results, tutorial guide, Endless screens,
-                the SVG system core map, and data.py (the only file that talks to engine/)
+                the SVG system core map, the stylesheet (theme.py), the top bar (shell.py), and
+                data.py (the only file that talks to engine/)
+.streamlit/     Streamlit theme (light theme and accent colour)
 engine/         game logic: level engine, grading, Endless engine, code judge, save files,
                 optional storage, and call_ai() (every AI call goes through it)
 scenarios/      game content as JSON (levels, rules, attack packages, Endless sections)

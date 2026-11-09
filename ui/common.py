@@ -9,6 +9,7 @@ import streamlit as st
 from ui import data
 
 STAR = "★"
+BOT_NAME = "Beanie"
 PERSONAL_DATA_NOTICE = "Do not enter real personal information."
 
 
@@ -34,6 +35,28 @@ def scroll_to_top() -> None:
         st.html(SCROLL_TO_TOP.format(count=state["scroll_count"]), unsafe_allow_javascript=True)
     except TypeError:
         pass  # an older Streamlit without unsafe_allow_javascript: the scroll position simply stays
+
+
+SCROLL_TO_LATEST = (
+    "<script>/* latest {token} */(function () {{"
+    "var chips = document.querySelectorAll('[class*=\"st-key-judge_\"]');"
+    "if (chips.length) {{ chips[chips.length - 1].scrollIntoView({{block: 'nearest', behavior: 'smooth'}}); }}"
+    "}})();</script>"
+)
+
+
+def scroll_to_latest(token: str) -> None:
+    """Keep the newest chat message in view. The text changes with the token so the script runs again."""
+    try:
+        st.html(SCROLL_TO_LATEST.format(token=token), unsafe_allow_javascript=True)  # our own script
+    except TypeError:
+        pass  # an older Streamlit without unsafe_allow_javascript
+
+
+def eyebrow(text: str, key: str) -> None:
+    """Show a small uppercase line above a heading."""
+    with st.container(key=f"eyebrow_{key}"):
+        st.caption(text)
 
 
 def goto(screen: str) -> None:

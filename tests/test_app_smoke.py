@@ -16,7 +16,7 @@ from streamlit.testing.v1 import AppTest  # noqa: E402
 
 from engine.storage import build_row  # noqa: E402
 from ui import common, data, endless, playback  # noqa: E402
-from ui.map import build_map_svg  # noqa: E402
+from ui.map import build_map_svg, legend_svg  # noqa: E402
 from ui.screens import level_status  # noqa: E402
 
 APP = str(ROOT / "app.py")
@@ -47,17 +47,27 @@ def at_results(rules: tuple[str, ...] = ("no_internal_codes",)) -> AppTest:
 # ---- map ---------------------------------------------------------------------------------------
 
 def test_map_svg() -> None:
-    """The map is well formed, shows every zone and marks lost zones with words, not only colour."""
+    """The map is well formed, shows every zone and marks each state with words, not only colour."""
     zones = LEVEL["map_zones"]
     secret = next(z["id"] for z in zones if z["ring"] != "outer")
-    outer = next(z["id"] for z in zones if z["ring"] == "outer")
-    svg = build_map_svg(zones, state={secret: "lost", outer: "lost"}, attacked=outer)
+    outers = [z["id"] for z in zones if z["ring"] == "outer"]
+    svg = build_map_svg(zones, state={secret: "lost", outers[0]: "lost"}, marks={outers[1]: "served"},
+                        focus=(outers[0], "target"))
     ET.fromstring(svg)  # raises if the SVG is not well formed
     for zone in zones:
         assert zone["label"].split()[0] in svg, zone["id"]
     assert svg.count('data-state="lost"') == 2
-    assert "✕ leaked" in svg and "⊘ refused" in svg
-    assert svg.count("#d62828") == 1  # only the attacked zone has the red outline
+    assert "\u2715 leaked" in svg and "\u2298 refused" in svg and "\u2713 served" in svg
+    assert "url(#hatch)" in svg  # a turned away customer is hatched, not only coloured
+    assert svg.count('data-focus="target"') == 1 and svg.count("<animate") == 1
+    assert 'data-focus="asking"' in build_map_svg(zones, focus=(outers[0], "asking"))
+
+
+def test_legend_svg() -> None:
+    """The legend is well formed and only lists the rings the level has."""
+    legend = legend_svg(["outer", "inner", "core"])
+    ET.fromstring(legend)
+    assert "Public" in legend and "Core" in legend and "Sensitive" not in legend and "turned away" in legend
 
 
 def test_map_escapes_labels() -> None:
@@ -134,7 +144,7 @@ def test_message_delay() -> None:
 def test_screen_flow() -> None:
     """Home, level select, level screen, Start, playback controls and the results screen all work."""
     at = new_app()
-    assert not at.exception and at.title[0].value.endswith("Chatbot Defense Arena")
+    assert not at.exception and any("Keep the secrets safe" in m.value for m in at.markdown)
     at.button(key="home_play").click().run()
     assert at.session_state["screen"] == "levels" and not at.exception
     at.button(key=f"play_{LEVEL['id']}").click().run()
@@ -157,7 +167,7 @@ def test_screen_flow() -> None:
     at.button(key="pb_results").click().run()
     assert at.session_state["screen"] == "results" and not at.exception
 
-    assert any("Perfect" in banner.value for banner in at.success)
+    assert any("Perfect" in m.value for m in at.markdown)  # the grade badge
     assert [m.label for m in at.metric] == ["Security", "Helpfulness", "Penalty", "Score"]
     assert at.session_state["progress"][LEVEL["id"]] == 3
 
@@ -185,7 +195,7 @@ def test_scrubber_jumps_to_a_message_and_pauses() -> None:
 def test_results_explain_a_leak_and_a_refusal() -> None:
     """A run that leaks shows the attack type and coach tip; a run that refuses names the rule to blame."""
     at = at_results(rules=("be_polite",))
-    assert at.error and "core was hacked" in at.error[0].value
+    assert any("Core hacked" in m.value for m in at.markdown)  # the grade badge
     assert any("Coach tip" in info.value for info in at.info)
     at = at_results(rules=("refuse_all",))
     assert any("Rule that turned them away" in md.value for md in at.markdown)
@@ -467,6 +477,22 @@ def test_loaded_game_is_never_graded_or_stored() -> None:
         assert not at.exception and not at.checkbox and not at.metric
         assert any("replay of a saved game" in i.value for i in at.info)
         assert recorder.calls == []
+        at.button(key="rs_replay").click().run()  # the replay shows the rules saved with the game
+        assert at.session_state["screen"] == "playback" and not at.exception
+
+
+def test_replay_of_a_save_without_rules() -> None:
+    """A save that has no rules fields (a hand made or older file) still replays without an error."""
+    run = at_results().session_state["run"]
+    bare = {"format": "chatbot-defense-arena/1", "level_id": LEVEL["id"], "events": run["result"]["events"]}
+    loaded = playback.run_from_save(bare)
+    assert loaded["chosen_rules"] is None and loaded["player_rules"] is None
+    at = AppTest.from_file(APP, default_timeout=30)
+    at.session_state["run"] = loaded
+    at.session_state["screen"] = "playback"
+    at.run()
+    assert not at.exception and at.session_state["screen"] == "playback"
+    assert any("No rules chosen" in m.value for m in at.markdown)
 
 
 if __name__ == "__main__":
