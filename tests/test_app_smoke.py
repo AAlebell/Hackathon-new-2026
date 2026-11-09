@@ -1,32 +1,59 @@
 """Smoke tests for the interface: map SVG, adapter and the screen flow. Run: python tests/test_app_smoke.py"""
 
+import json
 import os
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 os.environ["USE_FAKE_AI"] = "true"
 
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
-from ui import data  # noqa: E402
+from ui import common, data, playback  # noqa: E402
 from ui.map import build_map_svg  # noqa: E402
 from ui.screens import level_status  # noqa: E402
 
-APP = str(Path(__file__).resolve().parent.parent / "app.py")
-SCENARIO = data.load_scenario()
+APP = str(ROOT / "app.py")
+SCENARIO = data.load_scenario("cafe")
 LEVEL = SCENARIO["levels"][0]
+SAMPLE = json.loads((ROOT / "docs" / "sample_results.json").read_text(encoding="utf-8"))
+GOOD_RULE = f"rule_{LEVEL['id']}_no_internal_codes"
 
+
+def new_app() -> AppTest:
+    """Return a fresh app that has run once."""
+    return AppTest.from_file(APP, default_timeout=30).run()
+
+
+def at_results(rules: tuple[str, ...] = ("no_internal_codes",)) -> AppTest:
+    """Play tutorial_1 with the given rules through the screens and return the app on the results screen."""
+    at = new_app()
+    at.button(key="home_play").click().run()
+    at.button(key=f"play_{LEVEL['id']}").click().run()
+    for rule in rules:
+        at.toggle(key=f"rule_{LEVEL['id']}_{rule}").set_value(True).run()
+    at.button(key="start_run").click().run()
+    at.button(key="pb_all").click().run()
+    at.button(key="pb_results").click().run()
+    return at
+
+
+# ---- map ---------------------------------------------------------------------------------------
 
 def test_map_svg() -> None:
-    """The map is well formed, shows every zone and marks lost zones with text, not only colour."""
-    svg = build_map_svg(LEVEL["map_zones"], state={"staff_code": "lost"}, attacked="hours")
+    """The map is well formed, shows every zone and marks lost zones with words, not only colour."""
+    zones = LEVEL["map_zones"]
+    secret = next(z["id"] for z in zones if z["ring"] != "outer")
+    outer = next(z["id"] for z in zones if z["ring"] == "outer")
+    svg = build_map_svg(zones, state={secret: "lost", outer: "lost"}, attacked=outer)
     ET.fromstring(svg)  # raises if the SVG is not well formed
-    for zone in LEVEL["map_zones"]:
+    for zone in zones:
         assert zone["label"].split()[0] in svg, zone["id"]
-    assert svg.count('data-state="lost"') == 1
-    assert "✕ lost" in svg
+    assert svg.count('data-state="lost"') == 2
+    assert "✕ leaked" in svg and "⊘ refused" in svg
     assert svg.count("#d62828") == 1  # only the attacked zone has the red outline
 
 
@@ -47,6 +74,8 @@ def test_map_rejects_unknown_ring() -> None:
     raise AssertionError("expected ValueError")
 
 
+# ---- engine contract ---------------------------------------------------------------------------
+
 def structure(result: dict) -> dict:
     """Keep outcomes, maps and scores of a result and drop the reply wording."""
     keys = ("step", "sender", "zone", "outcome", "map")
@@ -56,24 +85,22 @@ def structure(result: dict) -> dict:
 
 
 def test_run_level_matches_sample_runs() -> None:
-    """run_level (stand-in or real engine) reproduces outcomes, maps and scores of every reference run."""
-    for name, run in data.sample_runs().items():
+    """run_level reproduces the outcomes, maps and scores of every reference run in docs/sample_results.json."""
+    for name, run in SAMPLE["samples"].items():
         got = data.run_level(LEVEL, run["chosen_rules"], run["result"]["package_index"])
         assert structure(got) == structure(run["result"]), name
-        if not data.using_real_engine():
-            assert got == run["result"], name  # the stand-in also reproduces the wording
 
 
 def test_sample_zones_match_level() -> None:
     """The level keeps the zone ids, rings and points listed in docs/sample_results.json."""
     keys = ("id", "ring", "points")
     shorten = lambda zones: [{k: zone[k] for k in keys} for zone in zones]  # noqa: E731
-    assert shorten(LEVEL["map_zones"]) == shorten(data.sample_map_zones())
+    assert shorten(LEVEL["map_zones"]) == shorten(SAMPLE["map_zones"])
 
 
 def test_tutorial_has_guide_steps() -> None:
     """The first level carries the 10 tutorial guide steps."""
-    assert len(LEVEL["guide_steps"]) == 10
+    assert len(data.get_guide_steps(LEVEL)) == 10
 
 
 def test_unknown_rule_raises() -> None:
@@ -92,26 +119,86 @@ def test_level_status() -> None:
     assert [level_status(levels, i, {"a": 2}) for i in range(3)] == ["cleared", "open", "locked"]
 
 
-def test_screen_flow() -> None:
-    """Home, level select, level screen, Start and the playback screen all work."""
-    at = AppTest.from_file(APP, default_timeout=30).run()
-    assert not at.exception and at.title[0].value.endswith("Chatbot Defense Arena")
-    assert at.button(key="home_endless").disabled
+# ---- playback, results, save and load ----------------------------------------------------------
 
+def test_message_delay() -> None:
+    """Long replies stay longer and Fast is quicker than Slow."""
+    short, long_ = {"reply": "Hi"}, {"reply": "x" * 300}
+    assert playback.message_delay(long_, "Normal") > playback.message_delay(short, "Normal")
+    assert playback.message_delay(short, "Fast") < playback.message_delay(short, "Slow")
+
+
+def test_screen_flow() -> None:
+    """Home, level select, level screen, Start, playback controls and the results screen all work."""
+    at = new_app()
+    assert not at.exception and at.title[0].value.endswith("Chatbot Defense Arena")
     at.button(key="home_play").click().run()
     assert at.session_state["screen"] == "levels" and not at.exception
-
     at.button(key=f"play_{LEVEL['id']}").click().run()
-    assert at.session_state["screen"] == "level" and not at.exception
-    assert len(at.toggle) == len(LEVEL["rules"])
+    assert at.session_state["screen"] == "level" and len(at.toggle) == len(LEVEL["rules"])
 
-    at.toggle(key=f"rule_{LEVEL['id']}_no_internal_codes").set_value(True).run()
+    at.toggle(key=GOOD_RULE).set_value(True).run()
     at.button(key="start_run").click().run()
     assert at.session_state["screen"] == "playback" and not at.exception
+    assert at.session_state["pb_step"] == 0 and at.session_state["pb_playing"]
+    events = at.session_state["run"]["result"]["events"]
+    assert [e["outcome"] for e in events] == ["blocked", "served", "blocked", "served", "served"]
+
+    at.button(key="pb_next").click().run()
+    assert at.session_state["pb_step"] == 1 and not at.session_state["pb_playing"]
+    at.button(key="pb_toggle").click().run()
+    assert at.session_state["pb_playing"]
+    at.button(key="pb_all").click().run()
+    assert at.session_state["pb_step"] == len(events) - 1
+    at.button(key="pb_results").click().run()
+    assert at.session_state["screen"] == "results" and not at.exception
+
+    assert any("Perfect" in banner.value for banner in at.success)
+    assert [m.label for m in at.metric] == ["Security", "Helpfulness", "Penalty", "Score"]
+    assert at.session_state["progress"][LEVEL["id"]] == 3
+
+    at.button(key="rs_replay").click().run()
+    assert at.session_state["screen"] == "playback" and at.session_state["pb_step"] == 0
+    at.button(key="pb_back").click().run()
+    assert at.session_state["screen"] == "level"
+
+
+def test_results_explain_a_leak_and_a_refusal() -> None:
+    """A run that leaks shows the attack type and coach tip; a run that refuses names the rule to blame."""
+    at = at_results(rules=("be_polite",))
+    assert at.error and "core was hacked" in at.error[0].value
+    assert any("Coach tip" in info.value for info in at.info)
+    at = at_results(rules=("refuse_all",))
+    assert any("Rule that turned them away" in md.value for md in at.markdown)
+    assert at.session_state["progress"] == {}  # a fail does not unlock the next level
+    assert at.button(key="rs_next").disabled
+
+
+def test_save_and_load_roundtrip() -> None:
+    """A saved round loads back as a replay-only run; bad files are rejected with a clear message."""
+    at = at_results()
     run = at.session_state["run"]
-    assert run["chosen_rules"] == ["no_internal_codes"] and run["run_id"]
-    outcomes = [event["outcome"] for event in run["result"]["events"]]
-    assert outcomes == ["blocked", "served", "blocked", "served", "served"], outcomes
+    text = data.export_game(playback.save_record(run))
+    loaded = playback.run_from_save(data.import_game(text))
+    assert loaded["loaded"] and loaded["recorded"] and loaded["level_id"] == LEVEL["id"]
+    assert loaded["result"]["events"] == run["result"]["events"]
+    bad = {"format": "chatbot-defense-arena/1", "level_id": "no_such_level", "result": {"events": run["result"]["events"]}}
+    for broken in (bad, {"format": "chatbot-defense-arena/1", "level_id": LEVEL["id"], "events": [{"sender": "x"}]},
+                   {"format": "chatbot-defense-arena/1", "level_id": LEVEL["id"], "events": []}):
+        try:
+            playback.run_from_save(broken)
+        except ValueError:
+            continue
+        raise AssertionError("expected ValueError")
+
+
+def test_explain_endless() -> None:
+    """Endless explanations name the attack type and carry the section's coach tip."""
+    section = SCENARIO["sections"][0]
+    result = data.run_section(section, "", 0)
+    items = playback.explain_endless(section, result)
+    assert items and all(item["coach_tip"] for item in items)
+    assert {item["kind"] for item in items} <= {"leak", "refusal"}
 
 
 def test_every_level_screen_opens() -> None:
@@ -128,6 +215,9 @@ def test_every_level_screen_opens() -> None:
         at.run()
         at.button(key="start_run").click().run()
         assert not at.exception and at.session_state["screen"] == "playback", level["id"]
+        at.button(key="pb_all").click().run()
+        at.button(key="pb_results").click().run()
+        assert not at.exception and at.session_state["screen"] == "results", level["id"]
 
 
 if __name__ == "__main__":

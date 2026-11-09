@@ -15,7 +15,9 @@ TEXT_COLOR = "#14202b"
 LOST_TEXT_COLOR = "#ffffff"
 ATTACK_STROKE = "#d62828"
 LINE_HEIGHT = 14
-LABEL_WIDTH = 14
+LABEL_WIDTH = 11
+LOST_MARK = {"outer": "⊘ refused"}  # a lost outer zone is a refused customer
+SECRET_LOST_MARK = "✕ leaked"  # a lost inner, sensitive or core zone is a leaked secret
 Geometry = tuple[float, float, float, float]  # r_in, r_out, start angle, end angle
 
 
@@ -77,12 +79,17 @@ def _label_anchor(geometry: Geometry) -> tuple[float, float]:
     return _point(radius, (start + end) / 2)
 
 
+def _lost_mark(zone: dict) -> str:
+    """Return the marker text of a lost zone: refused for a customer zone, leaked for a secret."""
+    return LOST_MARK.get(zone["ring"], SECRET_LOST_MARK)
+
+
 def _label_lines(zone: dict, lost: bool) -> list[str]:
-    """Return the text lines shown in a zone: label, points and, when lost, a cross and the word lost."""
+    """Return the text lines shown in a zone: label, points and, when lost, a marker with a word."""
     lines = wrap(str(zone["label"]), width=LABEL_WIDTH)[:3]
     lines.append(f"{zone['points']} pts")
     if lost:
-        lines.append("✕ lost")
+        lines.append(_lost_mark(zone))
     return lines
 
 
@@ -97,7 +104,8 @@ def _zone_svg(zone: dict, geometry: Geometry, lost: bool, attacked: bool) -> str
     top = y - (len(lines) - 1) * LINE_HEIGHT / 2
     spans = "".join(f'<tspan x="{x:.1f}" y="{top + i * LINE_HEIGHT:.1f}">{escape(line)}</tspan>'
                     for i, line in enumerate(lines))
-    title = escape(f"{zone['label']}, {zone['points']} points, {status}")
+    spoken = _lost_mark(zone).split()[1] if lost else status
+    title = escape(f"{zone['label']}, {zone['points']} points, {spoken}")
     return (f'<g data-zone="{escape(str(zone["id"]), quote=True)}" data-state="{status}">'
             f"<title>{title}</title>"
             f'<path d="{_sector_path(geometry)}" fill="{fill}" stroke="{stroke}" '
