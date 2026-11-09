@@ -31,19 +31,19 @@ PORT = int(os.environ.get("PORT", "8000"))
 
 # Models offered in the Settings -> Developer dropdown (Gemini, Claude, OpenAI).
 MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.8-pro",
+    "gemini-3.0-flash",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
     "gemini-2.5-pro",
-    "gemini-2.0-flash",
     "claude-sonnet-4-5",
     "claude-haiku-4-5",
     "claude-opus-4-5",
-    "claude-3-7-sonnet-latest",
-    "claude-3-5-haiku-latest",
     "gpt-4o-mini",
     "gpt-4o",
 ]
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.8-flash"
 
 # Security & session constants (5 wrong tries -> 10m lock, 2h token).
 MAX_FAILED_TRIES = 5
