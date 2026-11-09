@@ -18,7 +18,8 @@ SCREENS = {
 def init_state() -> None:
     """Set the session defaults once."""
     defaults = {"screen": "home", "level_id": None, "progress": {}, "run": None, "attempts": {},
-                "pb_step": 0, "pb_playing": False, "pb_last": 0.0}
+                "pb_step": 0, "pb_playing": False, "pb_last": 0.0,
+                "guide_index": 0, "guide_done": False, "guide_skipped": False}
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
     if "session_id" not in st.session_state:

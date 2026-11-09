@@ -5,7 +5,7 @@ import uuid
 
 import streamlit as st
 
-from ui import common, data
+from ui import common, data, guide
 from ui.common import STAR
 from ui.map import build_map_svg
 
@@ -62,11 +62,9 @@ def play_all(last: int) -> None:
     st.session_state.update(pb_step=last, pb_playing=False)
 
 
-def scrub() -> None:
-    """Jump to the message picked on the slider and pause."""
-    state = st.session_state
-    state["pb_step"] = state["pb_slider"] - 1
-    state["pb_playing"] = False
+def scrub_to(index: int) -> None:
+    """Jump to the message at this index and pause."""
+    st.session_state.update(pb_step=index, pb_playing=False)
 
 
 def show_chat(events: list[dict], step: int) -> None:
@@ -97,8 +95,13 @@ def show_controls(events: list[dict], step: int) -> None:
     every.button("Play all", key="pb_all", on_click=play_all, args=(last,), disabled=finished)
     speed.radio("Speed", list(SPEEDS), index=1, key="pb_speed", horizontal=True)
     if last > 0:
-        state["pb_slider"] = step + 1
-        st.slider("Message", 1, last + 1, key="pb_slider", on_change=scrub)
+        # The timer moves the step, so the slider is not driven through session state or on_change: a stale
+        # value from the browser would look like the player dragging it back. A new key per step starts it at
+        # the current message, so any other value it returns is the player's own drag.
+        picked = st.slider("Message", 1, last + 1, value=step + 1, key=f"pb_slider_{step}")
+        if picked != step + 1:
+            scrub_to(picked - 1)
+            st.rerun()
 
 
 @st.fragment(run_every=TICK_SECONDS)
@@ -106,6 +109,8 @@ def playback_view() -> None:
     """Chat and map for the current run. Only this part reruns on every tick, so the page stays calm."""
     run = st.session_state["run"]
     events = run["result"]["events"]
+    if guide.active_step("playback", common.run_source(run)):
+        st.session_state["pb_playing"] = False  # the guide pauses the chat until its step is closed
     advance_if_due(events)
     step = st.session_state["pb_step"]
     show_controls(events, step)
@@ -123,6 +128,7 @@ def playback_screen() -> None:
     """Show the chat playback of the current run."""
     run = st.session_state["run"]
     st.button("← Back", key="pb_back", on_click=common.goto, args=(BACK_SCREEN[run["mode"]],))
+    guide.show("playback", common.run_source(run))
     st.header("Watch the round")
     playback_view()
 
@@ -322,6 +328,7 @@ def results_screen() -> None:
         loaded_results(run)
         return
     source = common.run_source(run)
+    guide.show("results", source)
     with st.container(key="sec_results"):
         show_results_block(run, source)
     with st.container(key="sec_replay_button"):

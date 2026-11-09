@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from ui import common, data
+from ui import common, data, guide
 from ui.common import PERSONAL_DATA_NOTICE, STAR
 from ui.map import build_map_svg
 from ui.playback import load_game_widget
@@ -91,7 +91,11 @@ def level_screen() -> None:
     """Show the story, the theme, the map and the rule cards of the current level."""
     scenario = common.get_scenario()
     level = common.find_by_id(scenario["levels"], st.session_state["level_id"])
-    st.button("← Levels", key="level_back", on_click=common.goto, args=("levels",))
+    back_col, help_col, _ = st.columns([1, 1, 6])
+    back_col.button("← Levels", key="level_back", on_click=common.goto, args=("levels",))
+    if data.get_guide_steps(level):
+        help_col.button("Help", key="level_help", on_click=guide.restart)
+    guide.show("level", level)
     with st.container(key="sec_story"), st.container(border=True):
         st.header(level["title"])
         st.write(level.get("story") or scenario["description"])

@@ -136,6 +136,7 @@ def test_screen_flow() -> None:
     assert at.session_state["screen"] == "levels" and not at.exception
     at.button(key=f"play_{LEVEL['id']}").click().run()
     assert at.session_state["screen"] == "level" and len(at.toggle) == len(LEVEL["rules"])
+    at.button(key="guide_skip").click().run()  # the guide has its own tests below
 
     at.toggle(key=GOOD_RULE).set_value(True).run()
     at.button(key="start_run").click().run()
@@ -161,6 +162,21 @@ def test_screen_flow() -> None:
     assert at.session_state["screen"] == "playback" and at.session_state["pb_step"] == 0
     at.button(key="pb_back").click().run()
     assert at.session_state["screen"] == "level"
+
+
+def test_scrubber_jumps_to_a_message_and_pauses() -> None:
+    """Dragging the slider shows that message and pauses; the slider never moves the step by itself."""
+    at = new_app()
+    at.button(key="home_play").click().run()
+    at.button(key=f"play_{LEVEL['id']}").click().run()
+    at.button(key="guide_skip").click().run()
+    at.button(key="start_run").click().run()
+    assert at.session_state["pb_step"] == 0 and at.session_state["pb_playing"]
+    at.slider(key="pb_slider_0").set_value(4).run()
+    assert at.session_state["pb_step"] == 3 and not at.session_state["pb_playing"] and not at.exception
+    assert at.slider(key="pb_slider_3").value == 4
+    at.run()  # a plain rerun (like a timer tick) must not change the step
+    assert at.session_state["pb_step"] == 3
 
 
 def test_results_explain_a_leak_and_a_refusal() -> None:
@@ -199,6 +215,72 @@ def test_explain_endless() -> None:
     items = playback.explain_endless(section, result)
     assert items and all(item["coach_tip"] for item in items)
     assert {item["kind"] for item in items} <= {"leak", "refusal"}
+
+
+def guide_title(at: AppTest) -> str:
+    """Return the guide box heading currently on screen, or an empty string."""
+    return next((m.value for m in at.markdown if m.value.startswith("**Tutorial, step")), "")
+
+
+def test_guide_walkthrough() -> None:
+    """The 10 steps appear in order: 1 to 6 before the round, 7 pauses the chat, 8 to 10 on the results."""
+    at = new_app()
+    at.button(key="home_play").click().run()
+    at.button(key=f"play_{LEVEL['id']}").click().run()
+    steps = data.get_guide_steps(LEVEL)
+    for number in range(1, 7):
+        assert f"step {number} of 10: {steps[number - 1]['title']}" in guide_title(at), number
+        at.button(key="guide_next").click().run()
+    assert guide_title(at) == ""  # steps 7 to 10 do not belong to the level screen
+
+    at.toggle(key=GOOD_RULE).set_value(True).run()
+    at.button(key="start_run").click().run()
+    assert f"step 7 of 10: {steps[6]['title']}" in guide_title(at)
+    assert at.session_state["pb_step"] == 0 and not at.session_state["pb_playing"]  # chat paused by the guide
+    at.button(key="guide_next").click().run()
+    assert at.session_state["pb_playing"] and guide_title(at) == ""
+    at.button(key="pb_all").click().run()
+    at.button(key="pb_results").click().run()
+    for number in (8, 9, 10):
+        assert f"step {number} of 10: {steps[number - 1]['title']}" in guide_title(at), number
+        button = at.button(key="guide_next")
+        assert button.label == ("Got it" if number == 10 else "Next")
+        button.click().run()
+    assert at.session_state["guide_done"] and not at.session_state["guide_skipped"]
+    assert guide_title(at) == "" and not at.exception
+
+
+def test_guide_skip_help_and_early_start() -> None:
+    """Skip closes the guide, Help restarts it, and pressing Start early still shows step 7."""
+    at = new_app()
+    at.button(key="home_play").click().run()
+    at.button(key=f"play_{LEVEL['id']}").click().run()
+    at.button(key="guide_skip").click().run()
+    assert at.session_state["guide_done"] and at.session_state["guide_skipped"] and guide_title(at) == ""
+    at.button(key="level_help").click().run()
+    assert at.session_state["guide_index"] == 0 and "step 1 of 10" in guide_title(at)
+    at.toggle(key=GOOD_RULE).set_value(True).run()
+    at.button(key="start_run").click().run()  # still on step 1
+    assert "step 7 of 10" in guide_title(at) and not at.session_state["pb_playing"]
+
+
+def test_level_without_guide_has_no_guide_box_or_help() -> None:
+    """Only levels with guide steps show the guide and the Help button."""
+    plain = next(level for level in SCENARIO["levels"] if not data.get_guide_steps(level))
+    at = AppTest.from_file(APP, default_timeout=30)
+    at.session_state["screen"] = "level"
+    at.session_state["level_id"] = plain["id"]
+    at.run()
+    assert guide_title(at) == "" and not [b for b in at.button if b.key == "level_help"]
+
+
+def test_guide_css_targets_one_section() -> None:
+    """The highlight outlines the target and dims every other section of that screen only."""
+    from ui import guide
+
+    css = guide.highlight_css("level", "map")
+    assert ".st-key-sec_map {outline" in css and ".st-key-sec_story" in css and ".st-key-sec_chat" not in css
+    assert css.count("opacity") == 1
 
 
 def test_every_level_screen_opens() -> None:

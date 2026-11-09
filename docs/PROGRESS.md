@@ -11,7 +11,7 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - [x] Phase 5 (A) Save and load
 - [x] Phase 6 (B) Interface part 1
 - [x] Phase 7 (B) Playback and results
-- [ ] Phase 8 (B) Tutorial guide
+- [x] Phase 8 (B) Tutorial guide
 - [x] Phase 9 (A) More levels and balance test
 - [x] Phase 10 (A) Endless engine
 - [ ] Phase 11 (B) Endless interface
