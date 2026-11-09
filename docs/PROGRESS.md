@@ -10,13 +10,13 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - [x] Phase 4 (A) Grading
 - [x] Phase 5 (A) Save and load
 - [x] Phase 6 (B) Interface part 1
-- [ ] Phase 7 (B) Playback and results
-- [ ] Phase 8 (B) Tutorial guide
+- [x] Phase 7 (B) Playback and results
+- [x] Phase 8 (B) Tutorial guide
 - [x] Phase 9 (A) More levels and balance test
 - [x] Phase 10 (A) Endless engine
-- [ ] Phase 11 (B) Endless interface
-- [ ] Phase 12 Storage (part A done, part B open)
-- [ ] Phase 13 Final checks (part A done, part B open)
+- [x] Phase 11 (B) Endless interface
+- [x] Phase 12 Storage (part A done, part B done)
+- [x] Phase 13 Final checks (part A done, part B done)
 
 ## Decisions
 - Person A works on one branch, dong/auto-run, with one pull request for phases 0 to 13A (user request).
@@ -51,13 +51,19 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - Phase 13 part A: tests pass, no .env, data/ or key like strings (AIza, sb_, eyJ) tracked, requirements.txt installs on Python 3.14.
 
 ## Frontend notes (B, James)
-Phase 6 is done: home, level select, level screen with the SVG map and rule cards, a Start button that runs the level, and a placeholder playback screen. Phases 7, 8 and 11 are not started, 12B and 13B are open.
+Phases 6, 7, 8, 11, 12B and 13B are done. Optional phases 15 and 17 (Endless run interface, level path) were not started. Everything was checked in a real browser with USE_FAKE_AI=true; nothing has been run against real Gemini or Supabase (no keys).
 
 ### Decisions
-- Map rendering: `st.html` strips SVG in Streamlit 1.67 (the map came out empty), so ui/screens.py shows it with `st.markdown(..., unsafe_allow_html=True)` inside a `<div>` so markdown never touches the labels. Every label is escaped in ui/map.py.
-- ui/data.py is the only file in ui/ that touches engine/. With engine/level.py present it calls engine.scenarios.load_scenario and engine.level.pick_package and run_level. The stand-in (ui/sample_scenario.json and `_standin_run_level`) is only a fallback and is not used while the real engine exists. The stand-in counts every zone of a ring in the totals, the real engine counts only the zones in the played package, which does not matter while the real engine is used.
+- Map rendering: `st.html` strips SVG in Streamlit 1.67 (the map came out empty), so ui/common.py shows it with `st.markdown(..., unsafe_allow_html=True)` inside a `<div>` so markdown never touches the labels. Every label is escaped in ui/map.py. The map marks a lost inner, sensitive or core zone "leaked" and a lost outer zone "refused" (words, not only colour).
+- ui/data.py is the only file in ui/ that imports engine/ and always uses the real engine (the Phase 6 stand-in scenario was removed).
+- Playback: a `st.fragment(run_every=0.5)` advances the chat on its own (delay grows with reply length, Slow/Normal/Fast multiply it). The scrubber must not use `on_change` or a forced session value: a timer tick sent the browser's stale slider value back and reset the chat to message 1. It now has a new key per step and any value other than the current message is treated as the player's drag.
+- Tutorial guide: sections are `st.container(key="sec_<target>")`, the highlight is CSS on `.st-key-sec_<target>` and the other sections of the screen are dimmed. Step 7 pauses the chat until it is closed. Pressing Start early jumps the guide to step 7.
+- Every screen change scrolls to the top with a small script through `st.html(..., unsafe_allow_javascript=True)`. Streamlit only re-runs a script whose text changed, so the script text carries a counter.
+- Consent: the checkbox is per run (key includes run_id), unticked by default, and `record_play` is called at most once per run. Loaded saves have no checkbox and are never graded or stored. The player is told when storage is not set up.
+- Endless: 30 second cooldown (`ENDLESS_COOLDOWN_SECONDS` in ui/endless.py) counted down by a fragment. Explanations for Endless are built in ui/playback.py (`explain_endless`) from the leaked and refused events, because the engine has no explain function for sections.
 - The level screen shows `level["story"]` when present, otherwise the scenario description. Rule cards show the label (toggle) and the rule text only, never side effects. Order is JSON order until Phase 16.
-- The playback screen is a placeholder until Phase 7.
+- A Level mode run counts as a pass at one star or more and unlocks the next level; the progress lives in the browser session only.
 
 ### Notes
-- tests/test_app_smoke.py (B) checks the map SVG, the adapter against docs/sample_results.json and the screen flow, and is picked up by tests/run_all.py.
+- tests/test_app_smoke.py (B) covers the map, the engine contract against docs/sample_results.json, playback, results, save and load, the guide walkthrough, Endless, the cooldown and the consent rules. It is picked up by tests/run_all.py.
+- Known limits: the level select and progress reset when the page is reloaded; Endless was only run with fake AI replies, so helpfulness is low there until a real key is used.
