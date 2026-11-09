@@ -7,11 +7,10 @@ import streamlit as st
 
 from ui import common, data
 from ui.common import PERSONAL_DATA_NOTICE
-from ui.map import build_map_svg
+from ui.map import build_map_svg, legend_svg
 
 ENDLESS_COOLDOWN_SECONDS = 30
 RULES_BOX_HEIGHT = 220
-MAP_LEGEND = "Outer ring: information Beanie should share. Inner ring and core: secrets the attackers want."
 
 
 def open_section(section_id: str) -> None:
@@ -75,30 +74,24 @@ def run_button(section_id: str) -> None:
 def endless_select_screen() -> None:
     """Show the Endless sections."""
     scenario = common.get_scenario()
-    st.button("← Home", key="sections_back", on_click=common.goto, args=("home",))
-    st.header("Endless mode")
-    st.write("Write your own rules in plain English. A real AI plays Beanie, so the attackers are not scripted. "
+    st.button("\u2190 Home", key="sections_back", on_click=common.goto, args=("home",))
+    common.eyebrow("Endless mode", "sections")
+    st.header("Write your own rules")
+    st.write("A real AI plays Beanie, so the attackers are not scripted. "
              "You get one random set of attackers and customers each run.")
-    for section in scenario.get("sections", []):
-        with st.container(border=True):
-            st.subheader(section["title"])
-            st.write(section["theme"])
-            st.button("Play", key=f"section_{section['id']}", on_click=open_section, args=(section["id"],))
+    for index, section in enumerate(scenario.get("sections", [])):
+        with st.container(key=f"lvl_sec_{index}"):
+            info, action = st.columns([7, 2], vertical_alignment="center")
+            with info:
+                st.subheader(section["title"])
+                st.write(section["theme"])
+            action.button("Play", key=f"section_{section['id']}", on_click=open_section, args=(section["id"],),
+                          type="primary", use_container_width=True)
 
 
-def endless_screen() -> None:
-    """Show the theme, the map and the rules box of the current section."""
-    scenario = common.get_scenario()
-    section = common.find_by_id(scenario["sections"], st.session_state["section_id"])
-    st.button("← Sections", key="endless_back", on_click=common.goto, args=("endless_select",))
-    st.header(section["title"])
-    with st.container(key="sec_theme"):
-        st.info(f"**Theme.** {section['theme']}")
-    map_col, rules_col = st.columns(2)
-    with map_col, st.container(key="sec_map"):
-        common.show_svg(build_map_svg(section["map_zones"]))
-        st.caption(MAP_LEGEND)
-    with rules_col:
+def rules_panel(section: dict) -> None:
+    """Show the rules box with its counter, the notice and the Run button."""
+    with st.container(key="panel_rules"):
         st.subheader("Write your rules")
         rules = st.text_area("Rules for Beanie", key=rules_key(section["id"]), max_chars=data.MAX_RULES_CHARS,
                              height=RULES_BOX_HEIGHT, label_visibility="collapsed",
@@ -106,3 +99,21 @@ def endless_screen() -> None:
         st.caption(rules_counter_text(len(rules)))
         st.caption(PERSONAL_DATA_NOTICE)
         run_button(section["id"])
+
+
+def endless_screen() -> None:
+    """Show the theme, the map and the rules box of the current section."""
+    scenario = common.get_scenario()
+    section = common.find_by_id(scenario["sections"], st.session_state["section_id"])
+    st.button("\u2190 Sections", key="endless_back", on_click=common.goto, args=("endless_select",))
+    common.eyebrow(f"{scenario['name']} \u00b7 Endless mode", "endless")
+    st.header(section["title"])
+    with st.container(key="sec_theme"), st.container(key="goal"):
+        st.markdown(f"**Attacker's goal.** {section['theme']}")
+    map_col, rules_col = st.columns([11, 12], gap="medium")
+    with map_col, st.container(key="panel_map"), st.container(key="sec_map"):
+        st.subheader("System core")
+        common.show_svg(build_map_svg(section["map_zones"]))
+        common.show_svg(legend_svg([zone["ring"] for zone in section["map_zones"]]))
+    with rules_col:
+        rules_panel(section)

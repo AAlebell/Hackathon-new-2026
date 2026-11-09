@@ -7,15 +7,16 @@ import streamlit as st
 
 from ui import common, data, guide
 from ui.common import STAR
-from ui.map import build_map_svg
+from ui.map import build_map_svg, legend_svg
 
 SPEEDS = {"Slow": 1.6, "Normal": 1.0, "Fast": 0.4}
 BASE_DELAY_SECONDS = 2.0
 SECONDS_PER_CHAR = 1 / 60
 TICK_SECONDS = 0.5
-SENDER_AVATAR = {"attacker": "\U0001f575️", "customer": "\U0001f642"}
+SENDERS = ("attacker", "customer")
 OUTCOME_TEXT = {"blocked": "✔ blocked", "leaked": "✕ leaked",
                 "served": "✔ served", "refused": "⊘ refused"}
+JUDGE_CLASS = {"blocked": "good", "served": "good", "leaked": "bad", "refused": "warn"}
 EVENT_KEYS = ("sender", "text", "reply", "zone", "outcome", "map")
 GREAT_RULES_TIP = "Even great rules can fail. Real businesses should never give their chatbot secrets it does not need."
 CONSENT_TEXT = "Share my anonymous results to help research. No name or personal data is saved."
@@ -68,21 +69,98 @@ def scrub_to(index: int) -> None:
     st.session_state.update(pb_step=index, pb_playing=False)
 
 
-def show_chat(events: list[dict], step: int) -> None:
+def attack_types(source: dict) -> dict[str, str]:
+    """Return the attack type of every attack text in the level or section."""
+    return {attack["text"]: attack["type"] for package in source["attack_packages"] for attack in package}
+
+
+def judge_text(event: dict, zones: dict[str, dict]) -> str:
+    """Return the judge's one line verdict for a message, with the points it moved."""
+    zone = zones.get(event["zone"], {"label": event["zone"], "points": 0})
+    points = zone["points"]
+    return {"blocked": f"\u2714 Judge: secret kept, +{points} pts",
+            "leaked": f"\u2715 Judge: {zone['label']} leaked, -{points} pts",
+            "served": f"\u2714 Judge: customer helped, +{points} pts",
+            "refused": f"\u2298 Judge: customer turned away, -{points} pts"}[event["outcome"]]
+
+
+def show_chat(events: list[dict], step: int, source: dict) -> None:
     """Show the messages up to step: customers and attackers on the left, the chatbot on the right."""
+    zones = {zone["id"]: zone for zone in source["map_zones"]}
+    types = attack_types(source)
+    finished = step >= len(events) - 1
+    with st.container(key="panel_chat"):
+        with st.container(key="chat_head"):
+            st.markdown(f"\u2615 **{common.BOT_NAME}**")
+            st.caption("\u25cf Round over" if finished else "\u25cf Under attack")
+        with st.container(key="chat_body"):
+            for index, event in enumerate(events[: step + 1]):
+                with st.container(key=f"sep_{index}"):
+                    st.markdown(f"New chat \u00b7 {index + 1} of {len(events)}")
+                attacker = event["sender"] == "attacker"
+                with st.container(key=f"bub_{event['sender']}_{index}"):
+                    kind = types.get(event["text"], "attack").replace("_", " ")
+                    st.caption(f"Attacker \u00b7 {kind}" if attacker else "Customer")
+                    st.text(event["text"])
+                with st.container(key=f"bub_bot_{index}"):
+                    st.caption(common.BOT_NAME)
+                    st.text(event["reply"])
+                with st.container(key=f"judge_{JUDGE_CLASS[event['outcome']]}_{index}"):
+                    st.text(judge_text(event, zones))
+
+
+def tally(events: list[dict], step: int, zones: dict[str, dict]) -> dict[str, int]:
+    """Return the points kept, served and lost so far."""
+    totals = {"kept": 0, "served": 0, "lost": 0}
     for event in events[: step + 1]:
-        left, right = st.columns(2)
-        with left, st.chat_message("user", avatar=SENDER_AVATAR[event["sender"]]):
-            st.text(event["text"])
-        with right, st.chat_message("assistant", avatar="☕"):
-            st.text(event["reply"])
-            st.caption(OUTCOME_TEXT[event["outcome"]])
+        points = zones.get(event["zone"], {"points": 0})["points"]
+        key = {"blocked": "kept", "served": "served"}.get(event["outcome"], "lost")
+        totals[key] += points
+    return totals
 
 
-def show_map(zones: list[dict], event: dict) -> None:
-    """Show the map as it is after this message, with the attacked zone outlined."""
-    attacked = event["zone"] if event["sender"] == "attacker" else None
-    common.show_svg(build_map_svg(zones, state=event["map"], attacked=attacked))
+def map_marks(events: list[dict], step: int) -> tuple[dict, dict, tuple[str, str]]:
+    """Return the lost zones, the good outcomes so far, and the zone in focus with how it is shown."""
+    marks = {}
+    for event in events[: step + 1]:
+        if event["outcome"] in ("blocked", "served"):
+            marks[event["zone"]] = "safe" if event["outcome"] == "blocked" else "served"
+    now = events[step]
+    return now["map"], marks, (now["zone"], "target" if now["sender"] == "attacker" else "asking")
+
+
+def show_map(events: list[dict], step: int, source: dict) -> None:
+    """Show the map as it is after this message, with its points tally and legend."""
+    state, marks, focus = map_marks(events, step)
+    zones = {zone["id"]: zone for zone in source["map_zones"]}
+    totals = tally(events, step, zones)
+    with st.container(key="panel_map"), st.container(key="sec_map"):
+        st.subheader("System core")
+        common.show_svg(build_map_svg(source["map_zones"], state=state, marks=marks, focus=focus))
+        with st.container(key="tally"):
+            kept, served, lost = st.columns(3)
+            kept.metric("Secret pts kept", totals["kept"])
+            served.metric("Public pts served", totals["served"])
+            lost.metric("Points lost", f"-{totals['lost']}" if totals["lost"] else "0")
+        common.show_svg(legend_svg([zone["ring"] for zone in source["map_zones"]]))
+
+
+def show_rules_summary(run: dict, source: dict, step: int, count: int) -> None:
+    """Show what the player chose for this round and what the attackers are after."""
+    with st.container(key="panel_rules_used"):
+        st.subheader("Your rules this round")
+        if run["mode"] == "endless":
+            st.text(run.get("player_rules") or "(no rules written)")
+        else:
+            labels = {rule["id"]: rule["label"] for rule in source["rules"]}
+            chosen = run.get("chosen_rules") or []
+            for rule_id in chosen:
+                st.write(f"• {labels.get(rule_id, rule_id)}")
+            if not chosen:
+                st.write("No rules chosen")
+        with st.container(key="goal"):
+            st.markdown(f"**Attacker's goal.** {source['theme']}")
+        st.caption(f"Message {step + 1} of {count}")
 
 
 def show_controls(events: list[dict], step: int) -> None:
@@ -107,19 +185,23 @@ def show_controls(events: list[dict], step: int) -> None:
 
 @st.fragment(run_every=TICK_SECONDS)
 def playback_view() -> None:
-    """Chat and map for the current run. Only this part reruns on every tick, so the page stays calm."""
+    """Rules, map and chat for the current run. Only this part reruns on every tick, so the page stays calm."""
     run = st.session_state["run"]
+    source = common.run_source(run)
     events = run["result"]["events"]
-    if guide.active_step("playback", common.run_source(run)):
+    if guide.active_step("playback", source):
         st.session_state["pb_playing"] = False  # the guide pauses the chat until its step is closed
     advance_if_due(events)
     step = st.session_state["pb_step"]
     show_controls(events, step)
-    chat_col, map_col = st.columns([3, 2])
+    rules_col, map_col, chat_col = st.columns([10, 11, 11], gap="medium")
+    with rules_col:
+        show_rules_summary(run, source, step, len(events))
+    with map_col:
+        show_map(events, step, source)
     with chat_col, st.container(key="sec_chat"):
-        show_chat(events, step)
-    with map_col, st.container(key="sec_map"):
-        show_map(common.run_source(run)["map_zones"], events[step])
+        show_chat(events, step, source)
+        common.scroll_to_latest(f"{run['run_id']}-{step}")
     if step >= len(events) - 1 and st.button("See results", type="primary", key="pb_results"):
         common.goto("results")
         st.rerun()  # a button inside a fragment only reruns the fragment, so rerun the whole app
@@ -128,8 +210,10 @@ def playback_view() -> None:
 def playback_screen() -> None:
     """Show the chat playback of the current run."""
     run = st.session_state["run"]
-    st.button("← Back", key="pb_back", on_click=common.goto, args=(BACK_SCREEN[run["mode"]],))
-    guide.show("playback", common.run_source(run))
+    source = common.run_source(run)
+    st.button("\u2190 Back", key="pb_back", on_click=common.goto, args=(BACK_SCREEN[run["mode"]],))
+    guide.show("playback", source)
+    common.eyebrow(f"{common.get_scenario(run['scenario_id'])['name']} \u00b7 {source['title']}", "playback")
     st.header("Watch the round")
     playback_view()
 
@@ -145,7 +229,7 @@ def check_events(events: object) -> list[dict]:
             raise ValueError("This save has malformed messages.")
         if not all(isinstance(event[key], str) for key in EVENT_KEYS[:5]) or not isinstance(event["map"], dict):
             raise ValueError("This save has malformed messages.")
-        if event["sender"] not in SENDER_AVATAR or event["outcome"] not in OUTCOME_TEXT:
+        if event["sender"] not in SENDERS or event["outcome"] not in OUTCOME_TEXT:
             raise ValueError("This save has malformed messages.")
     return events
 
@@ -160,7 +244,10 @@ def run_from_save(record: dict) -> dict:
         common.find_source(scenario_id, mode, source_id)
     except (ValueError, OSError, KeyError) as error:
         raise ValueError("This save is for a level that is not in this game.") from error
+    chosen, written = record.get("chosen_rules"), record.get("player_rules")
     return {"run_id": str(uuid.uuid4()), "mode": mode, "scenario_id": scenario_id, "level_id": source_id,
+            "chosen_rules": [rule for rule in chosen if isinstance(rule, str)] if isinstance(chosen, list) else None,
+            "player_rules": written if isinstance(written, str) else None,
             "result": {"events": events}, "loaded": True, "recorded": True, "saved": False}
 
 
@@ -214,10 +301,10 @@ def explain_endless(section: dict, result: dict) -> list[dict]:
     return items
 
 
-def show_explanation(item: dict, rule_labels: dict[str, str]) -> None:
+def show_explanation(item: dict, rule_labels: dict[str, str], index: int = 0) -> None:
     """Show one leak or refusal with its attack type, the rule to blame and the coach tip."""
-    with st.container(border=True):
-        st.markdown(f"**{'Leak' if item['kind'] == 'leak' else 'Refused customer'} at message {item['step']}**")
+    with st.container(key=f"note_{item['kind']}_{index}"):
+        st.markdown(f"**{'Leak' if item['kind'] == 'leak' else 'Turned away'}** \u00b7 message {item['step']}")
         st.text(item["message"])
         if item.get("attack_type"):
             st.caption(f"Attack type: {item['attack_type'].replace('_', ' ')}")
@@ -230,13 +317,15 @@ def show_explanation(item: dict, rule_labels: dict[str, str]) -> None:
 
 def show_grade(grade: dict) -> None:
     """Show the grade banner."""
+    kind, text = {
+        "lose": ("fail", "Core hacked"), "perfect": ("perfect", f"Perfect {STAR * 3}"),
+        "stars": ("pass", f"{STAR * grade['stars']} {grade['stars']} star{'s' if grade['stars'] > 1 else ''}"),
+    }.get(grade["grade"], ("fail", "Fail"))
+    with st.container(key=f"grade_{kind}"):
+        st.markdown(text)
     if grade["grade"] == "lose":
-        st.error("The core was hacked. You lost this round.")
-    elif grade["grade"] == "perfect":
-        st.success(f"Perfect! {STAR * 3}")
-    elif grade["grade"] == "stars":
-        st.success(f"{STAR * grade['stars']} {grade['stars']} star{'s' if grade['stars'] > 1 else ''}")
-    else:
+        st.caption("The core was hacked, so this round is lost whatever the score.")
+    elif grade["grade"] == "fail":
         st.warning("Not enough points. Try again with different rules.")
 
 
@@ -267,8 +356,8 @@ def show_results_block(run: dict, source: dict) -> None:
         items = explain_endless(source, run["result"])
     else:
         items = data.explain_result(source, run["chosen_rules"], run["result"])
-    for item in items:
-        show_explanation(item, {rule["id"]: rule["label"] for rule in source.get("rules", [])})
+    for index, item in enumerate(items):
+        show_explanation(item, {rule["id"]: rule["label"] for rule in source.get("rules", [])}, index)
     if run["grade"]["grade"] == "perfect" or run["grade"]["stars"] == 3:
         st.info(GREAT_RULES_TIP)
 
