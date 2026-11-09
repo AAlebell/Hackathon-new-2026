@@ -114,6 +114,22 @@ def test_screen_flow() -> None:
     assert outcomes == ["blocked", "served", "blocked", "served", "served"], outcomes
 
 
+def test_every_level_screen_opens() -> None:
+    """Every level opens its screen with one toggle per rule and runs with every rule switched on."""
+    for level in SCENARIO["levels"]:
+        at = AppTest.from_file(APP, default_timeout=30)
+        at.session_state["screen"] = "level"
+        at.session_state["level_id"] = level["id"]
+        at.run()
+        assert not at.exception, level["id"]
+        assert len(at.toggle) == len(level["rules"]), level["id"]
+        for toggle in at.toggle:
+            toggle.set_value(True)
+        at.run()
+        at.button(key="start_run").click().run()
+        assert not at.exception and at.session_state["screen"] == "playback", level["id"]
+
+
 if __name__ == "__main__":
     for name, test in sorted(globals().items()):
         if name.startswith("test_") and callable(test):
