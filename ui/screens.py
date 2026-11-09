@@ -52,7 +52,8 @@ def home_screen() -> None:
     st.write("You write the rules that protect the chatbot. You score for every secret kept "
              "and every real customer served, so refusing everything never wins.")
     st.button("Play levels", type="primary", key="home_play", on_click=common.goto, args=("levels",))
-    st.button("Endless mode (coming soon)", key="home_endless", disabled=True)
+    st.button("Endless mode", key="home_endless", on_click=common.goto, args=("endless_select",),
+              disabled=not scenario.get("sections"))
     load_game_widget("load_home")
 
 

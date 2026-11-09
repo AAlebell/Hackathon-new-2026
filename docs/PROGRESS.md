@@ -14,8 +14,8 @@ Contract: docs/MASTER_PROMPT.md section 4.
 - [x] Phase 8 (B) Tutorial guide
 - [x] Phase 9 (A) More levels and balance test
 - [x] Phase 10 (A) Endless engine
-- [ ] Phase 11 (B) Endless interface
-- [ ] Phase 12 Storage (part A done, part B open)
+- [x] Phase 11 (B) Endless interface
+- [x] Phase 12 Storage (part A done, part B done)
 - [ ] Phase 13 Final checks (part A done, part B open)
 
 ## Decisions

@@ -17,6 +17,25 @@ def show_svg(svg: str) -> None:
     st.markdown(f"<div>{svg}</div>", unsafe_allow_html=True)
 
 
+SCROLL_TO_TOP = (
+    "<script>/* scroll {count} */(function () {{"
+    "var main = document.querySelector('[data-testid=\"stMain\"]') || document.querySelector('section.main');"
+    "if (main) {{ main.scrollTo(0, 0); }} window.scrollTo(0, 0);"
+    "}})();</script>"
+)
+
+
+def scroll_to_top() -> None:
+    """Scroll to the top of the page. The chat is long, so the next screen must not open halfway down."""
+    state = st.session_state
+    state["scroll_count"] = state.get("scroll_count", 0) + 1
+    try:
+        # Our own script, no user text in it. Streamlit only re-runs a script whose text changed, hence the count.
+        st.html(SCROLL_TO_TOP.format(count=state["scroll_count"]), unsafe_allow_javascript=True)
+    except TypeError:
+        pass  # an older Streamlit without unsafe_allow_javascript: the scroll position simply stays
+
+
 def goto(screen: str) -> None:
     """Switch to another screen (used as a button callback)."""
     st.session_state["screen"] = screen

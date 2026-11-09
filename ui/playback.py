@@ -18,7 +18,8 @@ OUTCOME_TEXT = {"blocked": "✔ blocked", "leaked": "✕ leaked",
                 "served": "✔ served", "refused": "⊘ refused"}
 EVENT_KEYS = ("sender", "text", "reply", "zone", "outcome", "map")
 GREAT_RULES_TIP = "Even great rules can fail. Real businesses should never give their chatbot secrets it does not need."
-LOADED_NOTICE = "This is a replay of a saved game. Loaded games are not graded again and are never stored."
+CONSENT_TEXT = "Share my anonymous results to help research. No name or personal data is saved."
+LOADED_NOTICE ="This is a replay of a saved game. Loaded games are not graded again and are never stored."
 BACK_SCREEN = {"level": "level", "endless": "endless"}
 
 
@@ -300,6 +301,33 @@ def show_navigation(run: dict) -> None:
     back.button("Home", key="rs_home", on_click=common.goto, args=("home",))
 
 
+def record_args(run: dict, source: dict) -> dict:
+    """Return the arguments of engine.storage.record_play for a finished run."""
+    mode = common.storage_mode(run["mode"], run["level_id"])
+    args = {"mode": mode, "scenario_id": run["scenario_id"], "level_id": run["level_id"],
+            "run_id": run["run_id"], "session_id": st.session_state["session_id"],
+            "attempt_number": run["attempt"], "result": run["result"], "grade": run["grade"]}
+    if mode == "endless":
+        model, temperature = data.ai_settings()
+        args.update(player_rules=run["player_rules"], ai_model=model, ai_temperature=temperature)
+    else:
+        args["chosen_rules"] = run["chosen_rules"]
+        if mode == "tutorial" and data.get_guide_steps(source):
+            args["guide_skipped"] = st.session_state["guide_skipped"]
+    return args
+
+
+def consent_box(run: dict, source: dict) -> None:
+    """Show the consent checkbox (unticked) and store the run, once, only if it is ticked."""
+    ticked = st.checkbox(CONSENT_TEXT, key=f"consent_{run['run_id']}")
+    if ticked and not run["recorded"]:
+        run["recorded"] = True
+        run["saved"] = data.record_play(**record_args(run, source))
+    if ticked:
+        st.caption("Thank you, your anonymous result was saved." if run["saved"]
+                   else "Storage is not set up here, so nothing was saved.")
+
+
 def show_save_load(run: dict) -> None:
     """Show Save my game and Load my game."""
     save, load = st.columns(2)
@@ -335,4 +363,5 @@ def results_screen() -> None:
         st.button("Replay", key="rs_replay", on_click=replay)
     with st.container(key="sec_retry_next_buttons"):
         show_navigation(run)
+    consent_box(run, source)
     show_save_load(run)

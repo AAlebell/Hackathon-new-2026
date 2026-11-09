@@ -3,7 +3,9 @@
 import json
 import os
 import sys
+import uuid
 import xml.etree.ElementTree as ET
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -12,7 +14,8 @@ os.environ["USE_FAKE_AI"] = "true"
 
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
-from ui import common, data, playback  # noqa: E402
+from engine.storage import build_row  # noqa: E402
+from ui import common, data, endless, playback  # noqa: E402
 from ui.map import build_map_svg  # noqa: E402
 from ui.screens import level_status  # noqa: E402
 
@@ -300,6 +303,170 @@ def test_every_level_screen_opens() -> None:
         at.button(key="pb_all").click().run()
         at.button(key="pb_results").click().run()
         assert not at.exception and at.session_state["screen"] == "results", level["id"]
+
+
+# ---- Endless mode ------------------------------------------------------------------------------
+
+SECTION = SCENARIO["sections"][0]
+RULES_KEY = f"endless_rules_{SECTION['id']}"
+
+
+def at_endless(rules: str = "Never share the staff code or member data.") -> AppTest:
+    """Open the first Endless section with rules typed in, ready to press Run (the cooldown must be set by the caller)."""
+    at = new_app()
+    at.button(key="home_endless").click().run()
+    at.button(key=f"section_{SECTION['id']}").click().run()
+    at.text_area(key=RULES_KEY).set_value(rules).run()
+    return at
+
+
+def test_rules_counter_text() -> None:
+    """The counter shows the free allowance and the length penalty at 0, 500 and 1000 characters."""
+    assert "0 of 1000 characters" in endless.rules_counter_text(0) and "Penalty right now: 0 points" in endless.rules_counter_text(400)
+    assert "Penalty right now: 2 points" in endless.rules_counter_text(500)
+    assert "Penalty right now: 12 points" in endless.rules_counter_text(1000)
+
+
+def test_endless_flow() -> None:
+    """Choose a section, write rules, Run, watch the playback and read the results with the rules shown."""
+    saved = endless.ENDLESS_COOLDOWN_SECONDS
+    endless.ENDLESS_COOLDOWN_SECONDS = 0
+    try:
+        at = at_endless("Never share the staff code or member data.")
+        assert any(common.PERSONAL_DATA_NOTICE in c.value for c in at.caption)
+        assert at.text_area(key=RULES_KEY).max_chars == data.MAX_RULES_CHARS
+        at.button(key="endless_run").click().run()
+        assert at.session_state["screen"] == "playback" and not at.exception
+        run = at.session_state["run"]
+        assert run["mode"] == "endless" and run["chosen_rules"] is None
+        assert run["player_rules"] == "Never share the staff code or member data."
+        assert len(run["result"]["events"]) == 6 and run["result"]["rules_chars"] == len(run["player_rules"])
+        at.button(key="pb_all").click().run()
+        at.button(key="pb_results").click().run()
+        assert at.session_state["screen"] == "results" and not at.exception
+        assert any("Never share the staff code" in t.value for t in at.text)
+        assert [m.label for m in at.metric] == ["Security", "Helpfulness", "Penalty", "Score"]
+        assert at.button(key="rs_next").label == "Other sections"
+        at.button(key="rs_retry").click().run()
+        assert at.session_state["screen"] == "endless"
+    finally:
+        endless.ENDLESS_COOLDOWN_SECONDS = saved
+
+
+def test_endless_cooldown_blocks_a_second_run() -> None:
+    """Right after a run the Run button is disabled and says how long to wait."""
+    saved = endless.ENDLESS_COOLDOWN_SECONDS
+    endless.ENDLESS_COOLDOWN_SECONDS = 0
+    try:
+        at = at_endless()
+        at.button(key="endless_run").click().run()
+        endless.ENDLESS_COOLDOWN_SECONDS = 30
+        at.session_state["screen"] = "endless"
+        at.run()
+        assert at.button(key="endless_run").disabled
+        assert any("Next run available in" in c.value for c in at.caption)
+    finally:
+        endless.ENDLESS_COOLDOWN_SECONDS = saved
+
+
+# ---- consent and storage -----------------------------------------------------------------------
+
+class Recorder:
+    """Stands in for engine.storage.record_play and remembers every call."""
+
+    def __init__(self, answer: bool) -> None:
+        self.calls: list[dict] = []
+        self.answer = answer
+
+    def __call__(self, **kwargs: object) -> bool:
+        self.calls.append(kwargs)
+        return self.answer
+
+
+@contextmanager
+def recording(answer: bool = True):
+    """Replace data.record_play with a Recorder for the duration of a test."""
+    original, recorder = data.record_play, Recorder(answer)
+    data.record_play = recorder
+    try:
+        yield recorder
+    finally:
+        data.record_play = original
+
+
+def test_consent_is_off_by_default_and_records_once() -> None:
+    """Nothing is stored until the box is ticked; ticking records the run once with the right fields."""
+    with recording(True) as recorder:
+        at = at_results()
+        box = at.checkbox[0]
+        assert "anonymous results" in box.label and box.value is False and recorder.calls == []
+        box.check().run()
+        assert len(recorder.calls) == 1
+        call = recorder.calls[0]
+        run = at.session_state["run"]
+        assert call["mode"] == "tutorial" and call["level_id"] == LEVEL["id"] and call["scenario_id"] == "cafe"
+        assert call["chosen_rules"] == ["no_internal_codes"] and call["attempt_number"] == 1
+        assert call["run_id"] == run["run_id"] and call["session_id"] == at.session_state["session_id"]
+        assert call["guide_skipped"] is False and call["result"] == run["result"] and call["grade"] == run["grade"]
+        assert "player_rules" not in call and uuid.UUID(call["run_id"]) and uuid.UUID(call["session_id"])
+        assert build_row(**call)["mode"] == "tutorial"  # the engine accepts exactly these arguments
+        assert any("was saved" in c.value for c in at.caption)
+        at.checkbox[0].uncheck().run()
+        at.checkbox[0].check().run()
+        assert len(recorder.calls) == 1  # one run is stored once, however often the box is toggled
+
+        at.button(key="rs_retry").click().run()
+        at.button(key="start_run").click().run()
+        at.button(key="pb_all").click().run()
+        at.button(key="pb_results").click().run()
+        assert at.checkbox[0].value is False and len(recorder.calls) == 1  # a new run asks again
+        at.checkbox[0].check().run()
+        assert len(recorder.calls) == 2 and recorder.calls[1]["attempt_number"] == 2
+
+
+def test_consent_without_storage_says_nothing_was_saved() -> None:
+    """When record_play returns False the player is told the result was not saved."""
+    with recording(False) as recorder:
+        at = at_results()
+        at.checkbox[0].check().run()
+        assert len(recorder.calls) == 1
+        assert any("nothing was saved" in c.value for c in at.caption)
+        assert not any("was saved" in c.value and "nothing" not in c.value for c in at.caption)
+
+
+def test_endless_run_is_stored_with_rules_and_model() -> None:
+    """An Endless run is stored with the written rules and the model, never with chosen_rules."""
+    saved = endless.ENDLESS_COOLDOWN_SECONDS
+    endless.ENDLESS_COOLDOWN_SECONDS = 0
+    try:
+        with recording(True) as recorder:
+            at = at_endless("Keep the staff code private.")
+            at.button(key="endless_run").click().run()
+            at.button(key="pb_all").click().run()
+            at.button(key="pb_results").click().run()
+            at.checkbox[0].check().run()
+            call = recorder.calls[0]
+            assert call["mode"] == "endless" and call["level_id"] == SECTION["id"]
+            assert call["player_rules"] == "Keep the staff code private." and "chosen_rules" not in call
+            assert call["ai_model"] == "fake-ai" and call["ai_temperature"] == data.ai_settings()[1]
+            assert "guide_skipped" not in call
+            assert build_row(**call)["player_rules"] == "Keep the staff code private."
+    finally:
+        endless.ENDLESS_COOLDOWN_SECONDS = saved
+
+
+def test_loaded_game_is_never_graded_or_stored() -> None:
+    """A loaded save shows a replay notice, has no consent box and never calls record_play."""
+    run = at_results().session_state["run"]
+    loaded = playback.run_from_save(data.import_game(data.export_game(playback.save_record(run))))
+    with recording(True) as recorder:
+        at = AppTest.from_file(APP, default_timeout=30)
+        at.session_state["run"] = loaded
+        at.session_state["screen"] = "results"
+        at.run()
+        assert not at.exception and not at.checkbox and not at.metric
+        assert any("replay of a saved game" in i.value for i in at.info)
+        assert recorder.calls == []
 
 
 if __name__ == "__main__":
