@@ -5,7 +5,6 @@ import streamlit as st
 from ui import common, data, guide
 from ui.common import PERSONAL_DATA_NOTICE, STAR
 from ui.map import build_map_svg, legend_svg
-from ui.playback import load_game_widget
 
 STATUS_TEXT = {"open": "▶ Open", "locked": "\U0001f512 Locked"}
 HERO_NOTE = "Every business, person and secret here is fictional. Level mode needs no AI and no key."
@@ -117,7 +116,7 @@ def home_screen() -> None:
     st.write("Security is the share of secret points you kept. Helpfulness is the share of public questions "
              "answered. Refusing everything fails, and so does leaking.")
     grade_tiles()
-    load_game_widget("load_home")
+
 
 
 def level_card(levels: list[dict], index: int, progress: dict, first_open: int) -> None:
