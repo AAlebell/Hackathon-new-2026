@@ -1,45 +1,63 @@
 # Progress
 
-Tick a phase only when its tests pass and it is pushed. Contract: docs/MASTER_PROMPT.md section 4.
-Roles: A = engine, scenarios, tests. B = interface, README, docs.
+Contract: docs/MASTER_PROMPT.md section 4.
 
 ## Phases
-- [ ] 0 (A) Skeleton. Started early by B: docs/ files and ui/__init__.py exist. Still open: rewrite CLAUDE.md, add `supabase` to requirements.txt, check .gitignore and .env.example, tests/run_all.py
-- [ ] 1 (A) engine/ai.py
-- [ ] 2 (A) Loader and tutorial level
-- [ ] 3 (A) Level engine
-- [ ] 4 (A) Grading
-- [ ] 5 (A) Save and load
-- [x] 6 (B) Interface part 1: home, level select, level screen, map
-- [ ] 7 (B) Playback and results
-- [ ] 8 (B) Tutorial guide
-- [ ] 9 (A) More levels and balance test
-- [ ] 10 (A) Endless engine
-- [ ] 11 (B) Endless interface
-- [ ] 12A (A) engine/storage.py
-- [ ] 12B (B) Consent checkbox and result storage
-- [ ] 13A (A) Final checks
-- [ ] 13B (B) README
-- [ ] 14 (A) Endless run, optional
-- [ ] 15 (B) Endless run interface, optional
-- [ ] 16 (A) Shop per try, optional
-- [ ] 17 (B) Level path and worlds, optional
-- [ ] 18 (A) More worlds, optional
+- [x] Phase 0 (A) Skeleton
+- [x] Phase 1 (A) engine/ai.py
+- [x] Phase 2 (A) Loader and tutorial level
+- [x] Phase 3 (A) Level engine
+- [x] Phase 4 (A) Grading
+- [x] Phase 5 (A) Save and load
+- [x] Phase 6 (B) Interface part 1
+- [ ] Phase 7 (B) Playback and results
+- [ ] Phase 8 (B) Tutorial guide
+- [x] Phase 9 (A) More levels and balance test
+- [x] Phase 10 (A) Endless engine
+- [ ] Phase 11 (B) Endless interface
+- [ ] Phase 12 Storage (part A done, part B open)
+- [ ] Phase 13 Final checks (part A done, part B open)
 
 ## Decisions
-- Map rendering: `st.html` strips SVG in Streamlit 1.67 (the map came out empty), so ui/screens.py shows it with `st.markdown(..., unsafe_allow_html=True)` inside a `<div>` so markdown never touches the labels. Every label is escaped in ui/map.py.
-- docs/sample_results.json and docs/supabase.sql are the originals supplied by the team. B had first generated its own copies, which were replaced.
-- The original sample file holds only map zones and three reference runs (`perfect`, `refused_everything`, `core_hacked`), not the level itself. So ui/sample_scenario.json is a stand-in tutorial_1 in the section 4.1 shape, rebuilt from those samples (same chat texts, replies and zone labels). Its guide steps are read from docs/guide_steps.json.
-- Until engine/level.py exists, ui/data.py uses that stand-in scenario and a stand-in `run_level`. It switches to the real engine by itself once engine/level.py exists (`importlib.util.find_spec`). Nothing else in ui/ imports engine/.
-- `event["step"]` starts at 1, as in the original sample. The interface relies on list order, not on this value.
-- Security total is the points of every inner, sensitive and core zone, helpfulness total is the points of every outer zone.
-- Open question for A: the original sample gives score 0 for a lose (core hacked), while the formula in 4.3 would give 50 for it. Phase 7 follows the engine output, so whatever `grade_level` returns is shown.
-- The level screen shows `level["story"]` when present, otherwise the scenario description (the contract has no story field).
-- Rule cards show the label (toggle) and the rule text only, never side effects. Order is JSON order until Phase 16.
-- The playback screen is a stub until Phase 7.
-- Not copied into docs/: the Vietnamese division-of-work file and the .docx (internal team notes, and the docx duplicates PLAN.md).
+- Person A works on one branch, dong/auto-run, with one pull request for phases 0 to 13A (user request).
+- CLAUDE.md contract and scenario shape sections now point to docs/MASTER_PROMPT.md section 4.
+- test_engine.py now just runs tests/run_all.py.
 
-## Notes for the other role
-- For A, Phase 0 is still open. CLAUDE.md still describes the old Easy and Medium contract (run_round, resolve_choice). The old engine (engine/rounds.py, engine/easy.py, the old scenarios/cafe.json, test_engine.py) is still in the repo. Phases 2 and 3 replace it. app.py no longer uses any of it.
-- When A writes tutorial_1, keep the ids from Phase 2 (rules `no_internal_codes`, `only_menu_topics`, `refuse_all`, `be_polite`, zones `hours`, `menu`, `wifi`, `staff_code`, `member_data`). Then `python tests/test_app_smoke.py` checks your `run_level` against docs/sample_results.json (outcomes, maps and scores, not reply wording), checks the zone ids, rings and points, and walks the screens.
-- Pull requests: work goes to a branch and is merged by PR, not pushed to main (see CLAUDE.md "Working together").
+- call_ai reads USE_FAKE_AI at call time (not import time), so tests can switch it per process.
+
+- scenarios/cafe.json is a copy of docs/cafe.json (old prototype format removed). The loader also accepts attack type "combined", used by the content file.
+- The old app.py, engine/easy.py and engine/rounds.py no longer work with the new cafe.json. Expected, Phase 6 (James) rewrites app.py; Phases 3 and 10 replace the old engine files.
+
+- security and helpfulness totals count only the zones attacked or asked about in the played package (same as docs/check_cafe_design.py). Zones nobody touched stay safe on the map but add no points.
+- Event steps start at 1, like docs/sample_results.json.
+- engine/easy.py deleted in Phase 3, superseded by engine/level.py.
+
+- Grading: "perfect" also needs no length penalty (written rules up to 400 characters). Scores and percentages are rounded to whole numbers.
+
+- import_game accepts "events" at the top level of the record or inside a nested "result" dict.
+
+- Phase 9: the optional level_3 and level_4 were not added (content was frozen in docs/cafe.json). tests/test_balance.py checks every level of every scenario.
+
+- Endless: a secret found in ANY reply (attacker or customer) marks its zone lost on that event. An attack outcome is "leaked" if its reply leaked any secret. Secrets shorter than 6 letters or digits (the "$2.10" supplier price) only match as a whole token, so "2100" is not a leak.
+- engine/rounds.py deleted and engine/judge.py rewritten in Phase 10 (superseded by engine/endless.py and the new judge). is_served is gone, use is_helpful.
+
+- Storage: build_row stores rules_used only for tutorial/level, rules_chars only for endless, guide_skipped only for tutorial, ai_model and ai_temperature only for endless. ENGINE_VERSION is "1.0.0". record_play is offline tested only (no Supabase keys yet).
+
+## Notes for James
+- Contract check of your branch claude/practical-mayer-3uwyov (not merged into main yet): ui/data.py calls load_scenario, pick_package and run_level with the section 4 names and shapes. No mismatch found. With this branch your tests/test_app_smoke.py passes against the real engine (checked in a scratch worktree, your files untouched).
+- Small difference only in your stand-in (_standin_run_level): it counts every zone of a ring in the totals, the real engine counts only zones attacked or asked about. The stand-in is no longer used once engine/level.py exists.
+- main's app.py still imports engine.easy and engine.rounds, which this branch deletes, so app.py on main will not start until your Phase 6 app.py is merged. Expected (master prompt Phase 0 notice).
+- Both branches create docs/PROGRESS.md, so the second one merged will get a merge conflict there. Keep both sets of ticks and notes.
+- Phase 13 part A: tests pass, no .env, data/ or key like strings (AIza, sb_, eyJ) tracked, requirements.txt installs on Python 3.14.
+
+## Frontend notes (B, James)
+Phase 6 is done: home, level select, level screen with the SVG map and rule cards, a Start button that runs the level, and a placeholder playback screen. Phases 7, 8 and 11 are not started, 12B and 13B are open.
+
+### Decisions
+- Map rendering: `st.html` strips SVG in Streamlit 1.67 (the map came out empty), so ui/screens.py shows it with `st.markdown(..., unsafe_allow_html=True)` inside a `<div>` so markdown never touches the labels. Every label is escaped in ui/map.py.
+- ui/data.py is the only file in ui/ that touches engine/. With engine/level.py present it calls engine.scenarios.load_scenario and engine.level.pick_package and run_level. The stand-in (ui/sample_scenario.json and `_standin_run_level`) is only a fallback and is not used while the real engine exists. The stand-in counts every zone of a ring in the totals, the real engine counts only the zones in the played package, which does not matter while the real engine is used.
+- The level screen shows `level["story"]` when present, otherwise the scenario description. Rule cards show the label (toggle) and the rule text only, never side effects. Order is JSON order until Phase 16.
+- The playback screen is a placeholder until Phase 7.
+
+### Notes
+- tests/test_app_smoke.py (B) checks the map SVG, the adapter against docs/sample_results.json and the screen flow, and is picked up by tests/run_all.py.
