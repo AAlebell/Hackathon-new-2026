@@ -78,9 +78,6 @@ pause between runs to protect the free AI quota.
 3 stars for a score of 90 or more, 2 stars for 75, 1 star for 60, and *fail* below that. If the core is hacked
 you *lose*.
 
-**Save and load.** *Save my game* downloads the round as a file on your computer. *Load my game* replays it.
-A loaded game is only replayed: it is never graded again and never stored.
-
 Even a perfect result carries one honest lesson. Rules in a prompt are only the first layer of defence. The
 best defence is to never give a chatbot a secret it does not need.
 
@@ -115,7 +112,6 @@ Storage is **off unless you set it up**, and the game works exactly the same wit
   the rules you wrote), the scores and grade, which zones leaked or refused, and the model name for Endless.
   No name, nickname or email is stored. The engine skips saving when written rules look like an email address
   or a phone number. A short notice under every rule box asks players not to type real personal information.
-- A loaded save is never stored.
 
 ## Credits and sources
 
